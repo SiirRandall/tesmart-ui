@@ -29,3 +29,4 @@ jobs:
     uses: slsa-framework/slsa-github-generator/.github/workflows/go-ossf-slsa3-publish.yml@v2.1.0
     with:
       go-version: '1.22'  # or your preferred supported Go version
+      config-file: .github/slsa/.slsa-goreleaser.yml
