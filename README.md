@@ -116,7 +116,7 @@ Tile icon size is set in code (default **84×84**) and can be tweaked later if d
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
 
 ---
 
