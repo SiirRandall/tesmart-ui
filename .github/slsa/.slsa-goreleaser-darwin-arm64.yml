@@ -1,10 +1,15 @@
 version: 1
+
 env:
-  GO111MODULE: on
-  CGO_ENABLED: "0"
+  - GO111MODULE: on
+  - CGO_ENABLED: "0"
+
 flags:
   - -trimpath
+
 goos: darwin
 goarch: arm64
+
 main: ./cmd/tesmart-ui
+
 binary: tesmart-ui-{{ .Os }}-{{ .Arch }}

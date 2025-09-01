@@ -1,11 +1,14 @@
 version: 1
+
 env:
-  GO111MODULE: on
-  CGO_ENABLED: "0"
+  - GO111MODULE: on
+  - CGO_ENABLED: "0"
+
 flags:
   - -trimpath
+
 goos: linux
 goarch: amd64
-# adjust if your main.go isn’t at repo root:
+
 main: ./cmd/tesmart-ui
 binary: tesmart-ui-{{ .Os }}-{{ .Arch }}
