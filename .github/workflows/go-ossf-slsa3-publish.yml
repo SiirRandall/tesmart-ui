@@ -2,6 +2,16 @@ name: Release (Fyne + SLSA)
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name to publish (e.g., v0.4.0). Required when running manually if not on a tag."
+        required: false
+        type: string
+      prerelease:
+        description: "Mark release as prerelease?"
+        required: false
+        type: boolean
+        default: false
   release:
     types: [created]
 
@@ -126,8 +136,17 @@ jobs:
       - build-macos-arm64
       - build-windows-amd64
     runs-on: ubuntu-22.04
+    # Resolve the tag for both tag-trigger and manual runs:
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fail if no tag was provided on manual run
+        if: ${{ github.ref_type != 'tag' && (inputs.tag == '' || inputs.tag == null) }}
+        run: |
+          echo "This workflow requires a tag. Provide one via 'Run workflow' → tag (e.g., v0.4.0), or push a tag and run on that."
+          exit 1
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -141,6 +160,10 @@ jobs:
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          generate_release_notes: true
+          make_latest: true
+          prerelease: ${{ inputs.prerelease == true }}
           files: |
             dist/tesmart-ui-linux-amd64
             dist/tesmart-ui-darwin-amd64
