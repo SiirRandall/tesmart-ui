@@ -1,25 +1,28 @@
-# .slsa-goreleaser.yml
+# .github/slsa/.slsa-goreleaser.yml  (or at repo root as .slsa-goreleaser.yml)
 version: 1
 
-# Env the builder allows through (GO* / CGO_* only).
 env:
   - GO111MODULE=on
   - CGO_ENABLED=0
 
-# Compiler flags.
 flags:
   - -trimpath
 
-# Target OS/ARCH for this build job (adjust as needed).
-goos: linux
-goarch: amd64
+# Build matrix
+goos:
+  - linux
+  - windows
+  - darwin
+goarch:
+  - amd64
+  - arm64
 
-# If your main package isn't at repo root, set it:
-# main: ./cmd/tesmart-ui/main.go
+# 👉 Set this to the folder that contains your main.go
+# Examples:
+#   main: ./cmd/tesmart-ui          # if your main.go is in cmd/tesmart-ui/main.go
+#   main: ./cmd/server
+#   main: .                         # if main.go is at repo root
+main: ./cmd/tesmart-ui
 
-# Name of the produced binary (you can template os/arch).
+# Name pattern for output binary
 binary: tesmart-ui-{{ .Os }}-{{ .Arch }}
-
-# (Optional) pass dynamic ldflags from the workflow via evaluated-envs.
-# ldflags:
-#   - "{{ .Env.VERSION_LDFLAGS }}"
