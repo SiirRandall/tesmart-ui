@@ -57,7 +57,7 @@ sudo apt install -y libgtk-3-dev libgl1-mesa-dev xorg-dev libxrandr-dev libxcurs
 ### Build & Run
 
 ```bash
-git clone https://github.com/<your-username>/tesmart-ui.git
+git clone https://github.com/SiirRandall/tesmart-ui.git
 cd tesmart-ui
 
 go mod tidy
