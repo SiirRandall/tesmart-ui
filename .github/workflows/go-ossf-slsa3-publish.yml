@@ -14,14 +14,17 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - name: Install GL/X11 dev headers for Fyne
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             gcc pkg-config libgl1-mesa-dev xorg-dev libxkbcommon-dev
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
+
       - name: Build (linux/amd64)
         env:
           CGO_ENABLED: '1'
@@ -29,6 +32,7 @@ jobs:
           mkdir -p dist
           cd cmd/tesmart-ui
           GOOS=linux GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-linux-amd64
+
       - name: Upload linux artifact
         uses: actions/upload-artifact@v4
         with:
@@ -39,9 +43,11 @@ jobs:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
+
       - name: Build (darwin/amd64)
         env:
           CGO_ENABLED: '1'
@@ -49,6 +55,7 @@ jobs:
           mkdir -p dist
           cd cmd/tesmart-ui
           GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-darwin-amd64
+
       - name: Upload macOS amd64 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -59,9 +66,11 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
+
       - name: Build (darwin/arm64)
         env:
           CGO_ENABLED: '1'
@@ -69,6 +78,7 @@ jobs:
           mkdir -p dist
           cd cmd/tesmart-ui
           GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmart-ui-darwin-arm64
+
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -79,6 +89,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install MSYS2 MinGW
         uses: msys2/setup-msys2@v2
         with:
@@ -86,9 +97,11 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkg-config
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
+
       - name: Build (windows/amd64)
         shell: bash
         env:
@@ -99,6 +112,7 @@ jobs:
           mkdir -p dist
           cd cmd/tesmart-ui
           GOOS=windows GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-windows-amd64.exe
+
       - name: Upload windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -106,17 +120,24 @@ jobs:
           path: dist/tesmart-ui-windows-amd64.exe
 
   publish:
-    needs: [build-linux-amd64, build-macos-amd64, build-macos-arm64, build-windows-amd64]
+    needs:
+      - build-linux-amd64
+      - build-macos-amd64
+      - build-macos-arm64
+      - build-windows-amd64
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
       - name: List artifacts (debug)
         run: ls -l dist
+
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:
@@ -126,17 +147,39 @@ jobs:
             dist/tesmart-ui-darwin-arm64
             dist/tesmart-ui-windows-amd64.exe
 
-  # SLSA-3 provenance for the above binaries (generic generator)
+  hash-subjects:
+    needs:
+      - build-linux-amd64
+      - build-macos-amd64
+      - build-macos-arm64
+      - build-windows-amd64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create base64-encoded subject list (sha256sum output)
+        id: subjects
+        run: |
+          set -euo pipefail
+          ls -l dist
+          files="dist/tesmart-ui-linux-amd64 dist/tesmart-ui-darwin-amd64 dist/tesmart-ui-darwin-arm64 dist/tesmart-ui-windows-amd64.exe"
+          echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
+    outputs:
+      hashes: ${{ steps.subjects.outputs.hashes }}
+
   slsa-provenance:
-    needs: publish
+    needs: [hash-subjects, publish]
     permissions:
-      contents: write
-      id-token: write
-      actions: read
+      actions: read     # to read workflow path
+      id-token: write   # to sign the provenance
+      contents: write   # to upload provenance to the release
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
-      subject-path: |
-        dist/tesmart-ui-linux-amd64
-        dist/tesmart-ui-darwin-amd64
-        dist/tesmart-ui-darwin-arm64
-        dist/tesmart-ui-windows-amd64.exe
+      base64-subjects: ${{ needs.hash-subjects.outputs.hashes }}
+      upload-assets: true
