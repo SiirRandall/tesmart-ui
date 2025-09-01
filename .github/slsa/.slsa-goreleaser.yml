@@ -1,0 +1,25 @@
+# .slsa-goreleaser.yml
+version: 1
+
+# Env the builder allows through (GO* / CGO_* only).
+env:
+  - GO111MODULE=on
+  - CGO_ENABLED=0
+
+# Compiler flags.
+flags:
+  - -trimpath
+
+# Target OS/ARCH for this build job (adjust as needed).
+goos: linux
+goarch: amd64
+
+# If your main package isn't at repo root, set it:
+# main: ./cmd/tesmart-ui/main.go
+
+# Name of the produced binary (you can template os/arch).
+binary: tesmart-ui-{{ .Os }}-{{ .Arch }}
+
+# (Optional) pass dynamic ldflags from the workflow via evaluated-envs.
+# ldflags:
+#   - "{{ .Env.VERSION_LDFLAGS }}"
