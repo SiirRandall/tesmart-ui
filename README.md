@@ -1,4 +1,4 @@
-# TeSmart UI
+# TESmart UI
 
 A cross-platform GUI for controlling **TESmart 16-port HDMI/KVM switches**.
 
@@ -107,7 +107,7 @@ Tile icon size is set in code (default **84×84**) and can be tweaked later if d
 
 ## Credits
 
-- **Code concepts & CLI inspiration:**  
+- **Code concepts & inspiration:**  
   [mirceanton/tesmartctl](https://github.com/mirceanton/tesmartctl)
 - **API documentation reference (especially ASCII LAN commands):**  
   [Kreeblah/TESmartSwitchAPI-macOS](https://github.com/Kreeblah/TESmartSwitchAPI-macOS)
