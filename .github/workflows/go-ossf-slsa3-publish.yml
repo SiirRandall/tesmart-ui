@@ -21,12 +21,23 @@ permissions: read-all
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - .github/slsa/.slsa-goreleaser-linux-amd64.yml
+          - .github/slsa/.slsa-goreleaser-linux-arm64.yml
+          - .github/slsa/.slsa-goreleaser-darwin-amd64.yml
+          - .github/slsa/.slsa-goreleaser-darwin-arm64.yml
+          - .github/slsa/.slsa-goreleaser-windows-amd64.yml
+          # - .github/slsa/.slsa-goreleaser-windows-arm64.yml  # optional
     permissions:
-      id-token: write     # to sign
-      contents: write     # to upload release assets
-      actions: read       # to read workflow path
-    # Bump from v1.4.0 → current stable (v2.1.0 as of Feb 24, 2025)
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2
     with:
-      go-version: '1.22'  # or your preferred supported Go version
-      config-file: .github/slsa/.slsa-goreleaser.yml
+      go-version: '1.22'
+      config-file: ${{ matrix.cfg }}
+      # optional: pass ldflags from workflow (example)
+      # evaluated-envs: VERSION_LDFLAGS:"-X main.version=${{ github.ref_name }}"
