@@ -1,27 +1,155 @@
-name: SLSA Go releaser
+name: Release (Fyne + SLSA)
+
 on:
   workflow_dispatch:
   release:
     types: [created]
 
-permissions: read-all
+permissions:
+  contents: write
+  id-token: write
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        cfg:
-          - .github/slsa/.slsa-goreleaser-linux-amd64.yml
-          - .github/slsa/.slsa-goreleaser-linux-arm64.yml
-          - .github/slsa/.slsa-goreleaser-darwin-amd64.yml
-          - .github/slsa/.slsa-goreleaser-darwin-arm64.yml
-          - .github/slsa/.slsa-goreleaser-windows-amd64.yml
+  build-linux-amd64:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/[email protected]
+      - name: Install GL/X11 dev headers for Fyne
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc pkg-config libgl1-mesa-dev xorg-dev libxkbcommon-dev
+      - uses: actions/[email protected]
+        with:
+          go-version: '1.22.12'
+      - name: Build (linux/amd64)
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          mkdir -p dist
+          cd cmd/tesmart-ui
+          GOOS=linux GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-linux-amd64
+      - name: Upload linux artifact
+        uses: actions/[email protected]
+        with:
+          name: linux-amd64
+          path: dist/tesmart-ui-linux-amd64
+
+  build-macos-amd64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/[email protected]
+      - uses: actions/[email protected]
+        with:
+          go-version: '1.22.12'
+      - name: Build (darwin/amd64)
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          mkdir -p dist
+          cd cmd/tesmart-ui
+          GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-darwin-amd64
+      - name: Upload macOS amd64 artifact
+        uses: actions/[email protected]
+        with:
+          name: darwin-amd64
+          path: dist/tesmart-ui-darwin-amd64
+
+  build-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/[email protected]
+      - uses: actions/[email protected]
+        with:
+          go-version: '1.22.12'
+      - name: Build (darwin/arm64)
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          mkdir -p dist
+          cd cmd/tesmart-ui
+          GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmart-ui-darwin-arm64
+      - name: Upload macOS arm64 artifact
+        uses: actions/[email protected]
+        with:
+          name: darwin-arm64
+          path: dist/tesmart-ui-darwin-arm64
+
+  build-windows-amd64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/[email protected]
+      - name: Install MSYS2 MinGW
+        uses: msys2/[email protected]
+        with:
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+      - uses: actions/[email protected]
+        with:
+          go-version: '1.22.12'
+      - name: Build (windows/amd64)
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+          CC: x86_64-w64-mingw32-gcc
+          CXX: x86_64-w64-mingw32-g++
+        run: |
+          mkdir -p dist
+          cd cmd/tesmart-ui
+          GOOS=windows GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-windows-amd64.exe
+      - name: Upload windows artifact
+        uses: actions/[email protected]
+        with:
+          name: windows-amd64
+          path: dist/tesmart-ui-windows-amd64.exe
+
+  # (Optional) Assemble & publish binaries to the GitHub Release
+  publish:
+    needs: [build-linux-amd64, build-macos-amd64, build-macos-arm64, build-windows-amd64]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/[email protected]
+      - uses: actions/[email protected]
+        with:
+          path: .
+      - name: Download artifacts
+        uses: actions/[email protected]
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload assets to the Release
+        uses: softprops/[email protected]
+        with:
+          files: |
+            dist/tesmart-ui-linux-amd64
+            dist/tesmart-ui-darwin-amd64
+            dist/tesmart-ui-darwin-arm64
+            dist/tesmart-ui-windows-amd64.exe
+
+  # Generate SLSA provenance for the built artifacts
+  slsa-provenance:
+    needs: publish
+    runs-on: ubuntu-22.04
     permissions:
-      id-token: write
       contents: write
+      id-token: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
-    with:
-      go-version: '1.22'
-      config-file: ${{ matrix.cfg }}
+    steps:
+      - uses: actions/[email protected]
+      - name: Download artifacts for attestation
+        uses: actions/[email protected]
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List artifacts (debug)
+        run: ls -l dist
+      - name: Generate SLSA3 provenance (generic)
+        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+        with:
+          subject-path: |
+            dist/tesmart-ui-linux-amd64
+            dist/tesmart-ui-darwin-amd64
+            dist/tesmart-ui-darwin-arm64
+            dist/tesmart-ui-windows-amd64.exe
