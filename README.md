@@ -1,4 +1,4 @@
-# TESmart UI
+# TeSmart UI
 
 A cross-platform GUI for controlling **TESmart 16-port HDMI/KVM switches**.
 
@@ -6,7 +6,7 @@ Built in **Go** with [Fyne](https://fyne.io/), this app provides a simple graphi
 
 ---
 
-##  Features
+## ✨ Features
 
 - **Visual Grid of Ports**  
   16 rounded tiles (dark theme; active tile highlighted blue).  
@@ -14,7 +14,7 @@ Built in **Go** with [Fyne](https://fyne.io/), this app provides a simple graphi
 
 - **Polling & Switching**  
   Polls the active input (default every 1s, configurable).  
-  One‑click switching with flicker suppression & optional verification reads.
+  One-click switching with flicker suppression & optional verification reads.
 
 - **Device Controls**  
   - Buzzer: mute / unmute  
@@ -22,9 +22,24 @@ Built in **Go** with [Fyne](https://fyne.io/), this app provides a simple graphi
   - Ping: quick health check  
   - Raw hex sender: advanced diagnostics
 
+- **Network Configuration** (ASCII protocol)  
+  - Read: `IP?`, `PT?`, `MA?`, `GW?`  
+  - Set: `IP:x.x.x.x;`, `PT:5000;`, `MA:255.255.255.0;`, `GW:x.x.x.1;`  
+  - After setting, a confirmation popup reminds you to **power-cycle** for the new IP/port to take effect.
+
 ---
 
-## Getting Started
+## 📸 Screenshots
+
+Main window:  
+![Main Window](docs/tesmart-ui-main.png)
+
+Network configuration dialog:  
+![Network Config](docs/tesmart-ui-networkconfig.png)
+
+---
+
+## 🚀 Getting Started
 
 ### Requirements
 
@@ -42,7 +57,7 @@ sudo apt install -y libgtk-3-dev libgl1-mesa-dev xorg-dev libxrandr-dev libxcurs
 ### Build & Run
 
 ```bash
-git clone https://github.com/SiirRandall/tesmart-ui.git
+git clone https://github.com/<your-username>/tesmart-ui.git
 cd tesmart-ui
 
 go mod tidy
@@ -57,7 +72,7 @@ go build -o tesmart-ui ./cmd/tesmart-ui
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 The app creates a YAML config on first run:
 
@@ -89,7 +104,7 @@ ports:
 ### Editing & Icons
 
 - **File → Connection…** — set app target IP/Port.  
-- **File → Edit Names / Icons…** — per‑port labels & icons.  
+- **File → Edit Names / Icons…** — per-port labels & icons.  
 - **Device → Network Config…** — read/set switch IP/Mask/Gateway/Port.
 
 Icon paths can be absolute or **relative to the config folder**.  
@@ -97,7 +112,7 @@ Tile icon size is set in code (default **84×84**) and can be tweaked later if d
 
 ---
 
-## Protocol Notes
+## 🧩 Protocol Notes
 
 - Input switching & status use **binary frames** (`AABB 03 .. EE`).  
 - Network configuration uses **ASCII** commands (`IP?`, `IP:192.168.1.100;`, etc.).  
@@ -105,21 +120,27 @@ Tile icon size is set in code (default **84×84**) and can be tweaked later if d
 
 ---
 
-## Credits
+## 🤖 CI / Releases
 
-- **Code concepts & inspiration:**  
+This repo includes an optional GitHub Actions workflow to build binaries for Linux, macOS, and Windows on tag push (e.g. `v1.0.0`) and publish a GitHub Release with artifacts. See `.github/workflows/release.yml`.
+
+---
+
+## 🙏 Credits
+
+- **Code concepts & CLI inspiration:**  
   [mirceanton/tesmartctl](https://github.com/mirceanton/tesmartctl)
 - **API documentation reference (especially ASCII LAN commands):**  
   [Kreeblah/TESmartSwitchAPI-macOS](https://github.com/Kreeblah/TESmartSwitchAPI-macOS)
 
 ---
 
-## License
+## 📜 License
 
-MIT - see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
 ---
 
 ## ⚠️ Disclaimer
 
-This project is not affiliated with TESmart. Use at your own risk. Changing network settings can temporarily disconnect the device until you **power‑cycle** and reconnect to the new IP.
+This project is not affiliated with TESmart. Use at your own risk. Changing network settings can temporarily disconnect the device until you **power-cycle** and reconnect to the new IP.
