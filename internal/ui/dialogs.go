@@ -159,7 +159,7 @@ func (u *AppUI) showNetworkConfigDialog() {
 	getBtn := widget.NewButton("Get Configuration", func() {
 		go func() {
 			cfgReply, err := u.cli.GetNetworkConfigASCII()
-			fyne.Do(func() {
+			fyne.DoAndWait(func() {
 				if err != nil {
 					dialog.ShowError(err, u.win)
 					return
@@ -185,11 +185,12 @@ func (u *AppUI) showNetworkConfigDialog() {
 
 		go func() {
 			err := u.cli.SetNetworkConfigASCII(ip, p, mask, gw)
-			fyne.Do(func() {
+			fyne.DoAndWait(func() {
 				if err != nil {
 					dialog.ShowError(fmt.Errorf("set failed: %v", err), u.win)
 					return
 				}
+
 				u.status.SetText("Network configuration sent")
 
 				dialog.ShowInformation(
@@ -202,7 +203,7 @@ func (u *AppUI) showNetworkConfigDialog() {
 					u.win,
 				)
 
-				// Update local target so the app knows intended destination.
+				// Update local target and persist
 				u.cfg.IP, u.cfg.Port = ip, p
 				if e := u.cfg.Save(); e == nil {
 					u.cli.SetTarget(u.cfg.IP, u.cfg.Port, u.cfg.GetTimeout(), u.cfg.SetTimeout())
@@ -312,4 +313,73 @@ func (u *AppUI) doTimeout(mode string) {
 		return
 	}
 	u.status.SetText("LED timeout: " + mode)
+}
+
+func (u *AppUI) showFirstSetupDialog() {
+	title := widget.NewLabelWithStyle("Welcome to TeSmart UI", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	desc := widget.NewLabel("Let's set up your KVM connection. Enter the IP and port of your TESmart switch below.\nYou can change these later from File → Connection…")
+
+	ipEntry := widget.NewEntry()
+	ipEntry.SetPlaceHolder("e.g., 192.168.1.10")
+	if u.cfg.IP != "" {
+		ipEntry.SetText(u.cfg.IP)
+	} else {
+		ipEntry.SetText("192.168.1.10")
+	}
+
+	portEntry := widget.NewEntry()
+	portEntry.SetPlaceHolder("5000")
+	if u.cfg.Port > 0 {
+		portEntry.SetText(strconv.Itoa(u.cfg.Port))
+	} else {
+		portEntry.SetText("5000")
+	}
+
+	form := widget.NewForm(
+		widget.NewFormItem("KVM IP", ipEntry),
+		widget.NewFormItem("KVM Port", portEntry),
+	)
+
+	// We'll assign the dialog into this var so the button can close it.
+	var d dialog.Dialog
+
+	saveBtn := widget.NewButton("Save & Continue", func() {
+		ip := strings.TrimSpace(ipEntry.Text)
+		p, err := strconv.Atoi(strings.TrimSpace(portEntry.Text))
+		if err != nil || p < 1 || p > 65535 {
+			dialog.ShowError(fmt.Errorf("invalid port"), u.win)
+			return
+		}
+		if ip == "" {
+			dialog.ShowError(fmt.Errorf("IP address cannot be empty"), u.win)
+			return
+		}
+
+		u.cfg.IP, u.cfg.Port = ip, p
+		u.cfg.SetupCompleted = true
+		if err := u.cfg.Save(); err != nil {
+			dialog.ShowError(fmt.Errorf("failed to save config: %v", err), u.win)
+			return
+		}
+		u.cli.SetTarget(u.cfg.IP, u.cfg.Port, u.cfg.GetTimeout(), u.cfg.SetTimeout())
+		u.status.SetText(fmt.Sprintf("Connection set → %s:%d", ip, p))
+
+		// Kick an initial poll and close the dialog.
+		go u.pollOnce()
+		if d != nil {
+			d.Hide()
+		}
+	})
+
+	body := container.NewVBox(
+		title,
+		widget.NewSeparator(),
+		desc,
+		form,
+		container.NewHBox(layout.NewSpacer(), saveBtn),
+	)
+
+	d = dialog.NewCustomWithoutButtons("First-Time Setup", body, u.win)
+	d.Resize(fyne.NewSize(520, 320))
+	d.Show()
 }

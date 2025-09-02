@@ -67,6 +67,12 @@ func (u *AppUI) Run() {
 	u.win.SetContent(container.NewBorder(u.buildToolbar(), u.status, nil, nil, gridWrap))
 	u.win.SetOnClosed(func() { u.stopPoller() })
 
+	// First-run setup: if not completed, show the setup dialog immediately.
+	if !u.cfg.SetupCompleted || u.cfg.WasJustCreated() {
+		// Ensure this runs on the UI thread
+		fyne.Do(func() { u.showFirstSetupDialog() })
+	}
+
 	u.startPoller(u.cfg.PollIntervalMs)
 	u.win.ShowAndRun()
 }

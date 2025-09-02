@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -25,10 +26,12 @@ type Config struct {
 	SetTimeoutMs     int              `yaml:"set_timeout_ms"`
 	VerifyAfterSet   bool             `yaml:"verify_after_set"`
 	SwitchSuppressMs int              `yaml:"switch_suppress_ms"`
+	SetupCompleted   bool             `yaml:"setup_completed"`
 
 	fileDir  string `yaml:"-"`
 	filePath string `yaml:"-"`
 	mu       sync.Mutex
+	created  bool `yaml:"-"` // true if config file was created on this run
 }
 
 var defaultYAML = []byte(`# TeSmart UI (Go/Fyne) config
@@ -73,19 +76,29 @@ func paths() (dir, file string) {
 	return
 }
 
-func ensure(dir, file string) error {
+// ensure creates the config file if missing.
+// It returns (created, error).
+func ensure(dir, file string) (bool, error) {
 	if _, err := os.Stat(file); err == nil {
-		return nil
+		return false, nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return false, err
 	}
-	return os.WriteFile(file, defaultYAML, 0o644)
+	// Make sure default includes setup_completed flag
+	if !bytes.Contains(defaultYAML, []byte("\nsetup_completed:")) {
+		defaultYAML = append(defaultYAML, []byte("\nsetup_completed: false\n")...)
+	}
+	if err := os.WriteFile(file, defaultYAML, 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func Load() (*Config, error) {
 	dir, file := paths()
-	if err := ensure(dir, file); err != nil {
+	created, err := ensure(dir, file)
+	if err != nil {
 		return nil, err
 	}
 	b, err := os.ReadFile(file)
@@ -123,6 +136,7 @@ func Load() (*Config, error) {
 		}
 	}
 	cfg.fileDir, cfg.filePath = dir, file
+	cfg.created = created
 	return &cfg, nil
 }
 
@@ -141,3 +155,6 @@ func (c *Config) Path() string { return c.filePath }
 
 func (c *Config) GetTimeout() time.Duration { return time.Duration(c.GetTimeoutMs) * time.Millisecond }
 func (c *Config) SetTimeout() time.Duration { return time.Duration(c.SetTimeoutMs) * time.Millisecond }
+
+// WasJustCreated reports whether the config file was created on this run.
+func (c *Config) WasJustCreated() bool { return c.created }
