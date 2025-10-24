@@ -67,23 +67,35 @@ jobs:
           go-version: '1.22.12'
 
       - name: Install fyne CLI
+      # No -arch/-os flags used later
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
-      - name: Package macOS App (amd64)
+      - name: Build darwin/amd64 binary
         env:
-          FYNE_FONT: ""   # (optional) avoids font embedding if you had custom fonts
+          CGO_ENABLED: '1'
         run: |
           mkdir -p dist
+          pushd cmd/tesmart-ui
+          GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-macos-amd64
+          popd
+          chmod +x dist/tesmart-ui-macos-amd64
+
+      - name: Package .app (wrap the prebuilt binary)
+        env:
+          APP_ID: com.yourname.tesmartui
+          APP_NAME: "TeSmart UI"
+          ICON_PATH: ./internal/ui/assets/tray.png
+        run: |
+          # Package uses host OS (macOS). Point it at the prebuilt binary.
           fyne package \
-            -os darwin \
-            -arch amd64 \
-            -icon "$ICON_PATH" \
-            -name "$APP_NAME" \
-            -appID "$APP_ID" \
-            -release \
-            -sourceDir "$SRC_DIR"
-          # Fyne drops "<AppName>.app" in project root; zip it into dist
+            --executable dist/tesmart-ui-macos-amd64 \
+            --name "$APP_NAME" \
+            --appID "$APP_ID" \
+            --icon "$ICON_PATH" \
+            --release
+          # Fyne outputs "<AppName>.app" in repo root – zip it into dist
           APP_BUNDLE="${APP_NAME}.app"
+          mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "dist/tesmart-ui-macos-amd64.app.zip"
           rm -rf "$APP_BUNDLE"
 
@@ -104,18 +116,30 @@ jobs:
       - name: Install fyne CLI
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
-      - name: Package macOS App (arm64)
+      - name: Build darwin/arm64 binary
+        env:
+          CGO_ENABLED: '1'
         run: |
           mkdir -p dist
+          pushd cmd/tesmart-ui
+          GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmart-ui-macos-arm64
+          popd
+          chmod +x dist/tesmart-ui-macos-arm64
+
+      - name: Package .app (wrap the prebuilt binary)
+        env:
+          APP_ID: com.yourname.tesmartui
+          APP_NAME: "TeSmart UI"
+          ICON_PATH: ./internal/ui/assets/tray.png
+        run: |
           fyne package \
-            -os darwin \
-            -arch arm64 \
-            -icon "$ICON_PATH" \
-            -name "$APP_NAME" \
-            -appID "$APP_ID" \
-            -release \
-            -sourceDir "$SRC_DIR"
+            --executable dist/tesmart-ui-macos-arm64 \
+            --name "$APP_NAME" \
+            --appID "$APP_ID" \
+            --icon "$ICON_PATH" \
+            --release
           APP_BUNDLE="${APP_NAME}.app"
+          mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "dist/tesmart-ui-macos-arm64.app.zip"
           rm -rf "$APP_BUNDLE"
 
