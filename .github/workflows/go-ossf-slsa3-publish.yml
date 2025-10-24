@@ -135,7 +135,8 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      - name: Go deps (generate go.sum if missing)
+      # Ensure go.sum exists (avoids cache warnings)
+      - name: Go deps
         run: |
           go mod tidy
           go mod download
@@ -153,11 +154,11 @@ jobs:
           popd
           chmod +x dist/tesmartui-macos-arm64
 
-      - name: Package .app (bundle name w/o spaces; nice display name via metadata)
+      - name: Package .app (bundle name w/o spaces; display name via metadata)
         env:
           APP_ID: com.yourname.tesmartui
-          APP_NAME_BUNDLE: "TeSmartUI"      # no spaces
-          APP_NAME_DISPLAY: "TeSmart UI"    # pretty name shown to users
+          APP_NAME_BUNDLE: "TeSmartUI"      # bundle/executable name (no spaces)
+          APP_NAME_DISPLAY: "TeSmart UI"    # user-facing name
           ICON_PATH: ./internal/ui/assets/tray.png
         run: |
           fyne package \
@@ -172,16 +173,21 @@ jobs:
         env:
           APP_NAME_BUNDLE: "TeSmartUI"
         run: |
+          set -e
           APP="${APP_NAME_BUNDLE}.app"
           BIN="$APP/Contents/MacOS/${APP_NAME_BUNDLE}"
-          # verify Info.plist executable value
-          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist" || true
-          # make sure the binary exists and is executable
-          ls -l "$APP/Contents/MacOS" || true
-          chmod +x "$BIN" || true
-          # remove any stray attributes (quarantine, etc.)
+
+          # Verify Info.plist executable value matches our binary name
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist"
+
+          # Ensure binary exists and is executable
+          test -f "$BIN"
+          chmod +x "$BIN"
+
+          # Do NOT touch codesign; strip extended attributes only
           /usr/bin/xattr -cr "$APP" || true
-          # quick arch check
+
+          # Quick diagnostics
           /usr/bin/file "$BIN" || true
 
       - name: Zip app with ditto (preserves resources)
