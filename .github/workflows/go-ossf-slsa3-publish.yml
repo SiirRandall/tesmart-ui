@@ -78,7 +78,6 @@ jobs:
           chmod +x tesmart-ui-macos-amd64
           zip tesmart-ui-macos-amd64.zip tesmart-ui-macos-amd64
 
-
       - name: Upload macOS amd64 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -104,7 +103,6 @@ jobs:
           cd ../../dist
           chmod +x tesmart-ui-macos-arm64
           zip tesmart-ui-macos-arm64.zip tesmart-ui-macos-arm64
-
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
@@ -142,7 +140,6 @@ jobs:
           cd ../../dist
           powershell -Command "Compress-Archive -Path tesmart-ui-windows-amd64.exe -DestinationPath tesmart-ui-windows-amd64.zip"
 
-      # IMPORTANT: upload the ZIP (matches what we publish later)
       - name: Upload windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -189,8 +186,8 @@ jobs:
           prerelease: ${{ inputs.prerelease == true }}
           files: |
             dist/tesmart-ui-linux-amd64.tar.gz
-            dist/tesmart-ui-macos-amd64.app.zip
-            dist/tesmart-ui-macos-arm64.app.zip
+            dist/tesmart-ui-macos-amd64.zip
+            dist/tesmart-ui-macos-arm64.zip
             dist/tesmart-ui-windows-amd64.zip
 
   hash-subjects:
@@ -212,16 +209,8 @@ jobs:
         run: |
           set -euo pipefail
           ls -l dist
-          files="dist/tesmart-ui-linux-amd64 dist/tesmart-ui-macos-amd64.app.zip dist/tesmart-ui-macos-arm64.app.zip dist/tesmart-ui-windows-amd64.zip"
-          # For linux hash, hash the raw binary (not the tarball) for provenance, or switch to tar.gz if you prefer.
-          # Adjust as desired:
-          if [ -f dist/tesmart-ui-linux-amd64 ]; then
-            echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
-          else
-            # fallback: hash the tar.gz instead
-            files="dist/tesmart-ui-linux-amd64.tar.gz dist/tesmart-ui-macos-amd64.app.zip dist/tesmart-ui-macos-arm64.app.zip dist/tesmart-ui-windows-amd64.zip"
-            echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
-          fi
+          files="dist/tesmart-ui-linux-amd64.tar.gz dist/tesmart-ui-macos-amd64.zip dist/tesmart-ui-macos-arm64.zip dist/tesmart-ui-windows-amd64.zip"
+          echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
     outputs:
       hashes: ${{ steps.subjects.outputs.hashes }}
 
