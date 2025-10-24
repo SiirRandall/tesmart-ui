@@ -144,14 +144,29 @@ jobs:
             --icon "$ICON_PATH" \
             --release
 
+      - name: Sanity-fix bundle (strip signatures, ensure +x, clean xattrs)
+        env:
+          APP_NAME: "TeSmart UI"
+        run: |
+          APP="${APP_NAME}.app"
+          BIN="$APP/Contents/MacOS/${APP_NAME}"
+          chmod +x "$BIN" || true
+          # Remove any leftover or invalid signatures
+          /usr/bin/codesign --remove-signature "$APP" || true
+          /usr/bin/codesign --remove-signature "$BIN" || true
+          # Remove quarantine/extended attributes
+          /usr/bin/xattr -cr "$APP" || true
+          # Quick diagnostics
+          /usr/bin/file "$BIN" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist" || true
+
       - name: Zip app with ditto (preserves resources)
         env:
           APP_NAME: "TeSmart UI"
         run: |
           APP="${APP_NAME}.app"
-          xattr -cr "$APP" || true
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/tesmart-ui-macos-arm64.app.zip"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/tesmart-ui-macos-arm64.app.zip"
           rm -rf "$APP"
 
       - name: Upload macOS arm64 artifact
@@ -159,7 +174,7 @@ jobs:
         with:
           name: macos-arm64
           path: dist/tesmart-ui-macos-arm64.app.zip
-          
+
   build-windows-amd64:
     runs-on: windows-latest
     steps:
