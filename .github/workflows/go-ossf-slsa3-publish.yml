@@ -66,8 +66,7 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      # Ensure go.sum exists (silences cache/provenance warnings)
-      - name: Go deps (generate go.sum if missing)
+      - name: Go deps
         run: |
           go mod tidy
           go mod download
@@ -75,47 +74,48 @@ jobs:
       - name: Install fyne CLI
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
-      - name: Build darwin/amd64 binary
+      - name: Build darwin/amd64 binary (named TeSmartUI)
         env:
           CGO_ENABLED: '1'
         run: |
           mkdir -p dist
           pushd cmd/tesmart-ui
-          GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmartui-macos-amd64
+          GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/TeSmartUI
           popd
-          chmod +x dist/tesmartui-macos-amd64
+          chmod +x dist/TeSmartUI
 
-      - name: Package .app (bundle name w/o spaces; display name via metadata)
+      - name: Package .app (bundle name matches executable)
         env:
           APP_ID: com.yourname.tesmartui
-          APP_NAME_BUNDLE: "TeSmartUI"      # no spaces
-          APP_NAME_DISPLAY: "TeSmart UI"    # user-facing name
+          APP_NAME_BUNDLE: "TeSmartUI"
           ICON_PATH: ./internal/ui/assets/tray.png
         run: |
           fyne package \
-            --executable dist/tesmartui-macos-amd64 \
+            --executable dist/TeSmartUI \
             --name "$APP_NAME_BUNDLE" \
             --appID "$APP_ID" \
             --icon "$ICON_PATH" \
-            --metadata CFBundleDisplayName="$APP_NAME_DISPLAY" \
             --release
 
-      - name: Sanity-fix bundle (ensure CFBundleExecutable exists, +x, clean xattrs)
+      - name: Sanity-fix bundle (+x, clean xattrs, verify)
         env:
           APP_NAME_BUNDLE: "TeSmartUI"
         run: |
+          set -euo pipefail
           APP="${APP_NAME_BUNDLE}.app"
           BIN="$APP/Contents/MacOS/${APP_NAME_BUNDLE}"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist" || true
-          ls -l "$APP/Contents/MacOS" || true
-          chmod +x "$BIN" || true
+          test -f "$BIN"
+          chmod +x "$BIN"
           /usr/bin/xattr -cr "$APP" || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist" || true
           /usr/bin/file "$BIN" || true
+          ls -la "$APP/Contents/MacOS" || true
 
       - name: Zip app with ditto (preserves resources)
         env:
           APP_NAME_BUNDLE: "TeSmartUI"
         run: |
+          set -euo pipefail
           APP="${APP_NAME_BUNDLE}.app"
           mkdir -p dist
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/tesmart-ui-macos-amd64.app.zip"
@@ -135,7 +135,6 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      # Ensure go.sum exists (avoids cache warnings)
       - name: Go deps
         run: |
           go mod tidy
@@ -144,56 +143,54 @@ jobs:
       - name: Install fyne CLI
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
-      - name: Build darwin/arm64 binary
+      - name: Build darwin/arm64 binary (named TeSmartUI)
         env:
           CGO_ENABLED: '1'
         run: |
           mkdir -p dist
           pushd cmd/tesmart-ui
-          GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmartui-macos-arm64
+          GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/TeSmartUI
           popd
-          chmod +x dist/tesmartui-macos-arm64
+          chmod +x dist/TeSmartUI
 
-      - name: Package .app (bundle name w/o spaces; display name via metadata)
+      - name: Package .app (bundle name matches executable)
         env:
           APP_ID: com.yourname.tesmartui
           APP_NAME_BUNDLE: "TeSmartUI"      # bundle/executable name (no spaces)
-          APP_NAME_DISPLAY: "TeSmart UI"    # user-facing name
           ICON_PATH: ./internal/ui/assets/tray.png
         run: |
           fyne package \
-            --executable dist/tesmartui-macos-arm64 \
+            --executable dist/TeSmartUI \
             --name "$APP_NAME_BUNDLE" \
             --appID "$APP_ID" \
             --icon "$ICON_PATH" \
-            --metadata CFBundleDisplayName="$APP_NAME_DISPLAY" \
             --release
 
-      - name: Sanity-fix bundle (ensure CFBundleExecutable exists, +x, clean xattrs)
+      - name: Sanity-fix bundle (+x, clean xattrs, verify)
         env:
           APP_NAME_BUNDLE: "TeSmartUI"
         run: |
-          set -e
+          set -euo pipefail
           APP="${APP_NAME_BUNDLE}.app"
           BIN="$APP/Contents/MacOS/${APP_NAME_BUNDLE}"
-
-          # Verify Info.plist executable value matches our binary name
-          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist"
 
           # Ensure binary exists and is executable
           test -f "$BIN"
           chmod +x "$BIN"
 
-          # Do NOT touch codesign; strip extended attributes only
+          # Remove any extended attributes
           /usr/bin/xattr -cr "$APP" || true
 
-          # Quick diagnostics
+          # Quick diagnostics (non-fatal)
+          /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist" || true
           /usr/bin/file "$BIN" || true
+          ls -la "$APP/Contents/MacOS" || true
 
       - name: Zip app with ditto (preserves resources)
         env:
           APP_NAME_BUNDLE: "TeSmartUI"
         run: |
+          set -euo pipefail
           APP="${APP_NAME_BUNDLE}.app"
           mkdir -p dist
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/tesmart-ui-macos-arm64.app.zip"
