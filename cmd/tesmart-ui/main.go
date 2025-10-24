@@ -19,6 +19,13 @@ func main() {
 	cli := client.New(cfg.IP, cfg.Port,
 		cfg.GetTimeout(), cfg.SetTimeout())
 
+	/*app := ui.NewAppUI(cfg, cli)
+
+	// 🔽 Add just this one line to enable the system tray (tray menu + close-to-tray)
+	app.EnableSystemTray()
+
+	app.Run()*/
 	app := ui.NewAppUI(cfg, cli)
+	app.EnableSystemTray()
 	app.Run()
 }
