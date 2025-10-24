@@ -19,6 +19,12 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  APP_ID: com.yourname.tesmartui
+  APP_NAME: TeSmart UI
+  ICON_PATH: ./internal/ui/assets/tray.png
+  SRC_DIR: ./cmd/tesmart-ui
+
 jobs:
   build-linux-amd64:
     runs-on: ubuntu-22.04
@@ -40,12 +46,11 @@ jobs:
           CGO_ENABLED: '1'
         run: |
           mkdir -p dist
-          cd cmd/tesmart-ui
+          cd "$SRC_DIR"
           GOOS=linux GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-linux-amd64
           cd ../../dist
           chmod +x tesmart-ui-linux-amd64
           tar -czf tesmart-ui-linux-amd64.tar.gz tesmart-ui-linux-amd64
-
 
       - name: Upload linux artifact
         uses: actions/upload-artifact@v4
@@ -57,55 +62,68 @@ jobs:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
 
-      - name: Build (darwin/amd64)
+      - name: Install fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+
+      - name: Package macOS App (amd64)
         env:
-          CGO_ENABLED: '1'
+          FYNE_FONT: ""   # (optional) avoids font embedding if you had custom fonts
         run: |
           mkdir -p dist
-          cd cmd/tesmart-ui
-          GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-macos-amd64
-          cd ../../dist
-          chmod +x tesmart-ui-macos-amd64
-          zip tesmart-ui-macos-amd64.zip tesmart-ui-macos-amd64
-
+          fyne package \
+            -os darwin \
+            -arch amd64 \
+            -icon "$ICON_PATH" \
+            -name "$APP_NAME" \
+            -appID "$APP_ID" \
+            -release \
+            -sourceDir "$SRC_DIR"
+          # Fyne drops "<AppName>.app" in project root; zip it into dist
+          APP_BUNDLE="${APP_NAME}.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "dist/tesmart-ui-macos-amd64.app.zip"
+          rm -rf "$APP_BUNDLE"
 
       - name: Upload macOS amd64 artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-amd64
-          path: dist/tesmart-ui-macos-amd64.zip
+          path: dist/tesmart-ui-macos-amd64.app.zip
 
   build-macos-arm64:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
 
-      - name: Build (darwin/arm64)
-        env:
-          CGO_ENABLED: '1'
+      - name: Install fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+
+      - name: Package macOS App (arm64)
         run: |
           mkdir -p dist
-          cd cmd/tesmart-ui
-          GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmart-ui-macos-arm64
-          cd ../../dist
-          chmod +x tesmart-ui-macos-arm64
-          zip tesmart-ui-macos-arm64.zip tesmart-ui-macos-arm64
-
+          fyne package \
+            -os darwin \
+            -arch arm64 \
+            -icon "$ICON_PATH" \
+            -name "$APP_NAME" \
+            -appID "$APP_ID" \
+            -release \
+            -sourceDir "$SRC_DIR"
+          APP_BUNDLE="${APP_NAME}.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "dist/tesmart-ui-macos-arm64.app.zip"
+          rm -rf "$APP_BUNDLE"
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
-          path: dist/tesmart-ui-macos-arm64.zip
+          path: dist/tesmart-ui-macos-arm64.app.zip
 
   build-windows-amd64:
     runs-on: windows-latest
@@ -132,17 +150,17 @@ jobs:
           CXX: x86_64-w64-mingw32-g++
         run: |
           mkdir -p dist
-          cd cmd/tesmart-ui
+          cd "$SRC_DIR"
           GOOS=windows GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-windows-amd64.exe
           cd ../../dist
           powershell -Command "Compress-Archive -Path tesmart-ui-windows-amd64.exe -DestinationPath tesmart-ui-windows-amd64.zip"
 
-
+      # IMPORTANT: upload the ZIP (matches what we publish later)
       - name: Upload windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-amd64
-          path: dist/tesmart-ui-windows-amd64.exe
+          path: dist/tesmart-ui-windows-amd64.zip
 
   publish:
     needs:
@@ -151,7 +169,6 @@ jobs:
       - build-macos-arm64
       - build-windows-amd64
     runs-on: ubuntu-22.04
-    # Resolve the tag for both tag-trigger and manual runs:
     env:
       TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
     steps:
@@ -172,8 +189,6 @@ jobs:
       - name: Restore exec bits
         run: |
           chmod +x dist/tesmart-ui-linux-amd64 || true
-          chmod +x dist/tesmart-ui-macos-amd64 || true
-          chmod +x dist/tesmart-ui-macos-arm64 || true
 
       - name: List artifacts (debug)
         run: ls -l dist
@@ -187,8 +202,8 @@ jobs:
           prerelease: ${{ inputs.prerelease == true }}
           files: |
             dist/tesmart-ui-linux-amd64.tar.gz
-            dist/tesmart-ui-macos-amd64.zip
-            dist/tesmart-ui-macos-arm64.zip
+            dist/tesmart-ui-macos-amd64.app.zip
+            dist/tesmart-ui-macos-arm64.app.zip
             dist/tesmart-ui-windows-amd64.zip
 
   hash-subjects:
@@ -200,29 +215,35 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-
       - name: Create base64-encoded subject list (sha256sum output)
         id: subjects
         run: |
           set -euo pipefail
           ls -l dist
-          files="dist/tesmart-ui-linux-amd64 dist/tesmart-ui-macos-amd64 dist/tesmart-ui-macos-arm64 dist/tesmart-ui-windows-amd64.exe"
-          echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
+          files="dist/tesmart-ui-linux-amd64 dist/tesmart-ui-macos-amd64.app.zip dist/tesmart-ui-macos-arm64.app.zip dist/tesmart-ui-windows-amd64.zip"
+          # For linux hash, hash the raw binary (not the tarball) for provenance, or switch to tar.gz if you prefer.
+          # Adjust as desired:
+          if [ -f dist/tesmart-ui-linux-amd64 ]; then
+            echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
+          else
+            # fallback: hash the tar.gz instead
+            files="dist/tesmart-ui-linux-amd64.tar.gz dist/tesmart-ui-macos-amd64.app.zip dist/tesmart-ui-macos-arm64.app.zip dist/tesmart-ui-windows-amd64.zip"
+            echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
+          fi
     outputs:
       hashes: ${{ steps.subjects.outputs.hashes }}
 
   slsa-provenance:
     needs: [hash-subjects, publish]
     permissions:
-      actions: read     # to read workflow path
-      id-token: write   # to sign the provenance
-      contents: write   # to upload provenance to the release
+      actions: read
+      id-token: write
+      contents: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: ${{ needs.hash-subjects.outputs.hashes }}
