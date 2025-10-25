@@ -171,6 +171,12 @@ jobs:
           sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "${APPDIR}/${APP_NAME}.desktop"
           sed -i "s|^Icon=.*|Icon=${APP_NAME}|" "${APPDIR}/${APP_NAME}.desktop"
 
+          # Ensure AppImage expects path available
+          mkdir -p "${APPDIR}/usr/bin"
+          if [ ! -f "${APPDIR}/usr/bin/${BIN_NAME}" ]; then
+            ln -sf "../local/bin/${BIN_NAME}" "${APPDIR}/usr/bin/${BIN_NAME}"
+          fi
+
           # 5) Minimal AppRun launcher
           cat > "${APPDIR}/AppRun" << 'EOF'
           #!/usr/bin/env sh
