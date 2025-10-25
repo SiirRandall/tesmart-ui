@@ -154,25 +154,44 @@ jobs:
         env:
           APP_NAME: ${{ env.APP_NAME }}
           APP_ID:   ${{ env.APP_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           set -x
-          # Hard-fail if the key files are missing
-          test -x "AppDir/AppRun"
-          test -f "AppDir/${APP_ID}.desktop"
-          test -f "AppDir/${APP_ID}.png"
 
           # Validate .desktop strictly before building
           desktop-file-validate "AppDir/${APP_ID}.desktop"
 
-          # Pull appimagetool (x86_64)
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
+          # Sanity checks
+          test -x AppDir/AppRun
+          test -f "AppDir/${APP_ID}.desktop"
+          test -f "AppDir/${APP_ID}.png"
+
+          # Download appimagetool with retries and fallbacks
+          urls=(
+            "https://github.com/AppImage/AppImageKit/releases/latest/download/appimagetool-x86_64.AppImage"
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+            "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+          )
+
+          ok=0
+          for u in "${urls[@]}"; do
+            echo "Fetching appimagetool from: $u"
+            if curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors -A "CI-Agent" -o appimagetool "$u"; then
+              ok=1; break
+            fi
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "Failed to download appimagetool from all sources"
+            exit 1
+          fi
           chmod +x appimagetool
+          ./appimagetool --version || true
 
           # Ensure squashfs is available
           command -v mksquashfs
 
-          # Helpful metadata for the image (optional but good practice)
+          # Helpful metadata
           export VERSION="${GITHUB_REF_NAME:-$(date +%Y%m%d)}"
           export ARCH="x86_64"
 
@@ -187,6 +206,7 @@ jobs:
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
+          
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
