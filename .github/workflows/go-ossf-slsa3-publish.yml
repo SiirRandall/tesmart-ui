@@ -93,17 +93,17 @@ jobs:
             --icon "${ICON_ABS}" \
             --release \
             --source-dir "${SRC_DIR}"
+
       - name: Build AppImage from AppDir
         env:
           APP_NAME: ${{ env.APP_NAME }}
         run: |
           set -euo pipefail
-
           APPDIR="AppDir"
           BIN_NAME="tesmart-ui"
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
 
-          # 1) Extract Fyne bundle (debug)
+          # 1) Extract Fyne bundle
           rm -rf appdir "${APPDIR}"
           mkdir -p appdir "${APPDIR}"
           echo "== Contents of ${APP_NAME}.tar.xz =="
@@ -112,7 +112,7 @@ jobs:
           echo "== After extract =="
           ls -la appdir || true
 
-          # 2) If we have an install-style usr/ tree, copy it into AppDir/usr
+          # 2) Copy usr/ tree into AppDir/usr
           if [ -d "appdir/usr" ]; then
             mkdir -p "${APPDIR}/usr"
             cp -a appdir/usr/. "${APPDIR}/usr/"
@@ -122,11 +122,10 @@ jobs:
             exit 1
           fi
 
-          # 3) Locate the binary anywhere under AppDir/usr and normalize to AppDir/usr/bin/tesmart-ui
+          # 3) Normalize binary path
           mkdir -p "${APPDIR}/usr/bin"
           FOUND_BIN="$(find "${APPDIR}/usr" -type f -perm -u+x -name "${BIN_NAME}" | head -n1 || true)"
           if [ -z "${FOUND_BIN}" ]; then
-            # Fall back to any executable under a bin directory
             FOUND_BIN="$(find "${APPDIR}/usr" -type f -perm -u+x -path '*/bin/*' | head -n1 || true)"
           fi
           if [ -z "${FOUND_BIN}" ] || [ ! -f "${FOUND_BIN}" ]; then
@@ -134,19 +133,21 @@ jobs:
             find "${APPDIR}" -maxdepth 4 -type f -printf "%M %p\n" || true
             exit 1
           fi
-          # Move/rename to our canonical location
-          mv "${FOUND_BIN}" "${APPDIR}/usr/bin/${BIN_NAME}"
-          chmod +x "${APPDIR}/usr/bin/${BIN_NAME}"
+          mv "${FOUND_BIN}" "${APPDIR}/usr/local/bin/${BIN_NAME}" 2>/dev/null || true
+          chmod +x "${APPDIR}/usr/local/bin/${BIN_NAME}" || true
 
-          # 4) Desktop file & icon
-          # Prefer the ones packaged by Fyne under usr/local/share/...
+          # 4) Ensure /usr/bin symlink for AppImage
+          mkdir -p "${APPDIR}/usr/bin"
+          if [ ! -f "${APPDIR}/usr/bin/${BIN_NAME}" ]; then
+            ln -sf "../local/bin/${BIN_NAME}" "${APPDIR}/usr/bin/${BIN_NAME}"
+          fi
+
+          # 5) Desktop & icon
           DESKTOP_SRC="$(find appdir/usr/local/share/applications -maxdepth 1 -type f -name '*.desktop' 2>/dev/null | head -n1 || true)"
-          ICON_SRC="$(find appdir/usr/local/share/pixmaps -maxdepth 1 -type f \( -name '*.png' -o -name '*.svg' \) 2>/dev/null | head -n1 || true)"
-
+          ICON_SRC="$(find appdir/usr/local/share/pixmaps -maxdepth 1 -type f -name '*.png' 2>/dev/null | head -n1 || true)"
           if [ -n "${DESKTOP_SRC}" ]; then
             cp "${DESKTOP_SRC}" "${APPDIR}/${APP_NAME}.desktop"
           else
-            # Synthesize a basic .desktop if missing
             cat > "${APPDIR}/${APP_NAME}.desktop" <<EOF
           [Desktop Entry]
           Type=Application
@@ -157,27 +158,15 @@ jobs:
           Categories=Utility;
           EOF
           fi
-
-          # Icon: prefer packaged one; else repo icon; else warn
           if [ -n "${ICON_SRC}" ]; then
             cp "${ICON_SRC}" "${APPDIR}/${APP_NAME}.png"
           elif [ -f "${ICON_ABS}" ]; then
             cp "${ICON_ABS}" "${APPDIR}/${APP_NAME}.png"
-          else
-            echo "WARNING: No icon found; proceeding without a custom icon."
           fi
-
-          # Normalize Exec and Icon entries
           sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "${APPDIR}/${APP_NAME}.desktop"
           sed -i "s|^Icon=.*|Icon=${APP_NAME}|" "${APPDIR}/${APP_NAME}.desktop"
 
-          # Ensure AppImage expects path available
-          mkdir -p "${APPDIR}/usr/bin"
-          if [ ! -f "${APPDIR}/usr/bin/${BIN_NAME}" ]; then
-            ln -sf "../local/bin/${BIN_NAME}" "${APPDIR}/usr/bin/${BIN_NAME}"
-          fi
-
-          # 5) Minimal AppRun launcher
+          # 6) AppRun
           cat > "${APPDIR}/AppRun" << 'EOF'
           #!/usr/bin/env sh
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -186,7 +175,7 @@ jobs:
           EOF
           chmod +x "${APPDIR}/AppRun"
 
-          # 6) Build AppImage
+          # 7) Build AppImage
           wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
           ./appimagetool --comp zstd "${APPDIR}" "${APP_NAME}.AppImage"
@@ -194,6 +183,12 @@ jobs:
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/tesmart-ui-linux.AppImage
 
   build-macos-amd64:
     runs-on: macos-13
