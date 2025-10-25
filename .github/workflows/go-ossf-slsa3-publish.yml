@@ -76,7 +76,51 @@ jobs:
           GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-macos-amd64
           cd ../../dist
           chmod +x tesmart-ui-macos-amd64
-          zip tesmart-ui-macos-amd64.zip tesmart-ui-macos-amd64
+          
+          # Create app bundle structure
+          mkdir -p "TeSmart UI.app/Contents/MacOS"
+          mkdir -p "TeSmart UI.app/Contents/Resources"
+          
+          # Move binary to app bundle
+          mv tesmart-ui-macos-amd64 "TeSmart UI.app/Contents/MacOS/TeSmart UI"
+          
+          # Create Info.plist
+          cat > "TeSmart UI.app/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>TeSmart UI</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.yourname.tesmartui</string>
+              <key>CFBundleName</key>
+              <string>TeSmart UI</string>
+              <key>CFBundleDisplayName</key>
+              <string>TeSmart UI</string>
+              <key>CFBundleVersion</key>
+              <string>1.0.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.0</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.15</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSUIElement</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+          
+          # Remove quarantine attribute to bypass Gatekeeper
+          xattr -d com.apple.quarantine "TeSmart UI.app" 2>/dev/null || true
+          
+          # Create app bundle zip
+          zip -r tesmart-ui-macos-amd64.zip "TeSmart UI.app"
 
       - name: Upload macOS amd64 artifact
         uses: actions/upload-artifact@v4
@@ -102,7 +146,51 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmart-ui-macos-arm64
           cd ../../dist
           chmod +x tesmart-ui-macos-arm64
-          zip tesmart-ui-macos-arm64.zip tesmart-ui-macos-arm64
+          
+          # Create app bundle structure
+          mkdir -p "TeSmart UI.app/Contents/MacOS"
+          mkdir -p "TeSmart UI.app/Contents/Resources"
+          
+          # Move binary to app bundle
+          mv tesmart-ui-macos-arm64 "TeSmart UI.app/Contents/MacOS/TeSmart UI"
+          
+          # Create Info.plist
+          cat > "TeSmart UI.app/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>TeSmart UI</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.yourname.tesmartui</string>
+              <key>CFBundleName</key>
+              <string>TeSmart UI</string>
+              <key>CFBundleDisplayName</key>
+              <string>TeSmart UI</string>
+              <key>CFBundleVersion</key>
+              <string>1.0.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.0</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleSignature</key>
+              <string>????</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.15</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>LSUIElement</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+          
+          # Remove quarantine attribute to bypass Gatekeeper
+          xattr -d com.apple.quarantine "TeSmart UI.app" 2>/dev/null || true
+          
+          # Create app bundle zip
+          zip -r tesmart-ui-macos-arm64.zip "TeSmart UI.app"
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
