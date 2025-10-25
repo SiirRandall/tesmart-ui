@@ -99,67 +99,103 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 1) Extract Fyne bundle (and show what's inside for debug)
-          rm -rf appdir AppDir
-          mkdir -p appdir AppDir/usr/bin
+          APPDIR="AppDir"
+          BIN_NAME="tesmart-ui"
+          ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
+
+          # 1) Extract Fyne bundle (debug output included)
+          rm -rf appdir "${APPDIR}"
+          mkdir -p appdir "${APPDIR}"
           echo "== Contents of ${APP_NAME}.tar.xz =="
           tar -tJf "${APP_NAME}.tar.xz" || true
           tar -xJf "${APP_NAME}.tar.xz" -C appdir
           echo "== After extract =="
           ls -la appdir || true
 
-          # 2) Locate the binary robustly (it may not be +x and may have spaces)
-          BIN_NAME="tesmart-ui"
-          PRIMARY_CANDIDATE="appdir/${APP_NAME}"  # e.g. "appdir/TeSmart UI"
-          if [ -f "${PRIMARY_CANDIDATE}" ]; then
-            BIN_SRC="${PRIMARY_CANDIDATE}"
+          # 2) Build AppDir/usr
+          if [ -d "appdir/usr" ]; then
+            # Fyne produced an install-style tree
+            mkdir -p "${APPDIR}/usr"
+            # Move entire usr tree into AppDir
+            rsync -a "appdir/usr/" "${APPDIR}/usr/"
           else
-            # fallback: first file that is not .desktop or .png
-            BIN_SRC="$(find appdir -maxdepth 1 -type f ! -name '*.desktop' ! -name '*.png' | head -n1 || true)"
+            # Fallback: put a found binary into AppDir/usr/bin
+            mkdir -p "${APPDIR}/usr/bin"
+            # Try the exact name with spaces first
+            CANDIDATE="appdir/${APP_NAME}"
+            if [ -f "${CANDIDATE}" ]; then
+              BIN_SRC="${CANDIDATE}"
+            else
+              # First non-desktop/png regular file
+              BIN_SRC="$(find appdir -maxdepth 1 -type f ! -name '*.desktop' ! -name '*.png' | head -n1 || true)"
+            fi
+            if [ -z "${BIN_SRC:-}" ] || [ ! -f "${BIN_SRC}" ]; then
+              echo "ERROR: Could not locate app binary in the Fyne tarball."
+              ls -la appdir
+              exit 1
+            fi
+            chmod +x "${BIN_SRC}"
+            mv "${BIN_SRC}" "${APPDIR}/usr/bin/${BIN_NAME}"
           fi
 
-          if [ -z "${BIN_SRC:-}" ] || [ ! -f "${BIN_SRC}" ]; then
-            echo "ERROR: Could not locate app binary in the Fyne tarball."
-            echo "Listing appdir:"
-            ls -la appdir
-            exit 1
+          # 3) Ensure there is a runnable binary in AppDir/usr/bin
+          if [ ! -x "${APPDIR}/usr/bin/${BIN_NAME}" ]; then
+            # Try to locate an executable under usr/bin if present
+            FOUND_BIN="$(find "${APPDIR}/usr/bin" -type f -perm -u+x | head -n1 || true)"
+            if [ -n "${FOUND_BIN}" ]; then
+              # Normalize to BIN_NAME
+              mv "${FOUND_BIN}" "${APPDIR}/usr/bin/${BIN_NAME}"
+              chmod +x "${APPDIR}/usr/bin/${BIN_NAME}"
+            else
+              echo "ERROR: No executable found under ${APPDIR}/usr/bin"
+              find "${APPDIR}" -maxdepth 3 -type f -printf "%M %p\n" || true
+              exit 1
+            fi
           fi
 
-          # Ensure executable bit before moving
-          chmod +x "${BIN_SRC}"
-          mv "${BIN_SRC}" "AppDir/usr/bin/${BIN_NAME}"
-          chmod +x "AppDir/usr/bin/${BIN_NAME}"
+          # 4) Create a .desktop file at AppDir root
+          cat > "${APPDIR}/${APP_NAME}.desktop" <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=${APP_NAME}
+          Exec=${BIN_NAME}
+          Icon=${APP_NAME}
+          Terminal=false
+          Categories=Utility;
+          EOF
 
-          # 3) Desktop file & icon at AppDir root (these are created next to the tar)
-          cp "${APP_NAME}.desktop" "AppDir/${APP_NAME}.desktop"
-          cp "${APP_NAME}.png"      "AppDir/${APP_NAME}.png"
+          # 5) Attach icon (prefer repo icon)
+          if [ -f "${ICON_ABS}" ]; then
+            cp "${ICON_ABS}" "${APPDIR}/${APP_NAME}.png"
+          else
+            # Fallback: copy any png found in the tar
+            FALLBACK_ICON="$(find appdir -maxdepth 1 -type f -name '*.png' | head -n1 || true)"
+            if [ -n "${FALLBACK_ICON}" ]; then
+              cp "${FALLBACK_ICON}" "${APPDIR}/${APP_NAME}.png"
+            else
+              echo "WARNING: No icon found; using a placeholder."
+              convert -size 256x256 xc:lightgray -gravity center -pointsize 24 \
+                -annotate 0 "${APP_NAME}" "${APPDIR}/${APP_NAME}.png" || true
+            fi
+          fi
 
-          # Normalize Exec and Icon entries for AppImage
-          sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "AppDir/${APP_NAME}.desktop"
-          sed -i "s|^Icon=.*|Icon=${APP_NAME}|" "AppDir/${APP_NAME}.desktop"
-
-          # 4) Minimal AppRun launcher
-          cat > AppDir/AppRun << 'EOF'
+          # 6) Minimal AppRun
+          cat > "${APPDIR}/AppRun" << 'EOF'
           #!/usr/bin/env sh
           HERE="$(dirname "$(readlink -f "$0")")"
           export PATH="$HERE/usr/bin:$PATH"
           exec "$HERE/usr/bin/tesmart-ui" "$@"
           EOF
-          chmod +x AppDir/AppRun
+          chmod +x "${APPDIR}/AppRun"
 
-          # 5) Download and run appimagetool
+          # 7) Build AppImage
           wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
-          ./appimagetool --comp zstd AppDir "${APP_NAME}.AppImage"
+          ./appimagetool --comp zstd "${APPDIR}" "${APP_NAME}.AppImage"
 
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
-                - name: Upload Linux AppImage
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: linux-appimage
-                    path: dist/tesmart-ui-linux.AppImage
 
   build-macos-amd64:
     runs-on: macos-13
