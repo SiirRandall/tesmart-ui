@@ -116,11 +116,11 @@ jobs:
           </plist>
           EOF
           
-          # Remove quarantine attribute to bypass Gatekeeper
-          xattr -d com.apple.quarantine "TeSmart UI.app" 2>/dev/null || true
+          # Optional: ad-hoc sign app to avoid “damaged” warnings
+          codesign --force --deep --sign - "TeSmart UI.app"
           
-          # Create app bundle zip
-          zip -r tesmart-ui-macos-amd64.zip "TeSmart UI.app"
+          # Create app bundle zip with proper metadata preservation
+          ditto -c -k --sequesterRsrc --keepParent "TeSmart UI.app" tesmart-ui-macos-amd64.zip
 
       - name: Upload macOS amd64 artifact
         uses: actions/upload-artifact@v4
@@ -186,11 +186,11 @@ jobs:
           </plist>
           EOF
           
-          # Remove quarantine attribute to bypass Gatekeeper
-          xattr -d com.apple.quarantine "TeSmart UI.app" 2>/dev/null || true
+          # Optional: ad-hoc sign app to avoid “damaged” warnings
+          codesign --force --deep --sign - "TeSmart UI.app"
           
-          # Create app bundle zip
-          zip -r tesmart-ui-macos-arm64.zip "TeSmart UI.app"
+          # Create app bundle zip with proper metadata preservation
+          ditto -c -k --sequesterRsrc --keepParent "TeSmart UI.app" tesmart-ui-macos-arm64.zip
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
@@ -202,7 +202,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install MSYS2 MinGW
         uses: msys2/setup-msys2@v2
         with:
@@ -245,26 +244,20 @@ jobs:
       TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Fail if no tag was provided on manual run
         if: ${{ github.ref_type != 'tag' && (inputs.tag == '' || inputs.tag == null) }}
         run: |
           echo "This workflow requires a tag. Provide one via 'Run workflow' → tag (e.g., v0.4.0), or push a tag and run on that."
           exit 1
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-
       - name: Restore exec bits
-        run: |
-          chmod +x dist/tesmart-ui-linux-amd64 || true
-
+        run: chmod +x dist/tesmart-ui-linux-amd64 || true
       - name: List artifacts (debug)
         run: ls -l dist
-
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:
@@ -277,38 +270,3 @@ jobs:
             dist/tesmart-ui-macos-amd64.zip
             dist/tesmart-ui-macos-arm64.zip
             dist/tesmart-ui-windows-amd64.zip
-
-  hash-subjects:
-    needs:
-      - build-linux-amd64
-      - build-macos-amd64
-      - build-macos-arm64
-      - build-windows-amd64
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: Create base64-encoded subject list (sha256sum output)
-        id: subjects
-        run: |
-          set -euo pipefail
-          ls -l dist
-          files="dist/tesmart-ui-linux-amd64.tar.gz dist/tesmart-ui-macos-amd64.zip dist/tesmart-ui-macos-arm64.zip dist/tesmart-ui-windows-amd64.zip"
-          echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
-    outputs:
-      hashes: ${{ steps.subjects.outputs.hashes }}
-
-  slsa-provenance:
-    needs: [hash-subjects, publish]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: ${{ needs.hash-subjects.outputs.hashes }}
-      upload-assets: true
