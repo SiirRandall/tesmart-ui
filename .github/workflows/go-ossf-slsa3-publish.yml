@@ -69,7 +69,8 @@ jobs:
           sudo apt-get install -y \
             build-essential gcc pkg-config \
             libgl1-mesa-dev xorg-dev \
-            libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev
+            libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libfuse2
 
       - name: Install Fyne CLI
         run: |
@@ -78,7 +79,7 @@ jobs:
           which fyne
           fyne version || true
 
-      - name: Package Linux app (tar.xz + .desktop + icon)
+      - name: Package Linux AppImage
         env:
           CGO_ENABLED: '1'
           APP_NAME: ${{ env.APP_NAME }}
@@ -89,22 +90,21 @@ jobs:
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
           fyne package \
             --os linux \
+            --appimage \
             --name "${APP_NAME}" \
             --app-id "${APP_ID}" \
             --icon "${ICON_ABS}" \
             --release \
             --source-dir "${SRC_DIR}"
-          mkdir -p dist
-          mv "${APP_NAME}.tar.xz" dist/tesmart-ui-linux-appbundle.tar.xz || mv "${APP_NAME}.tar.xz" dist/
-          zip -j dist/tesmart-ui-linux-desktop-files.zip "${APP_NAME}.desktop" "${APP_NAME}.png" || true
 
-      - name: Upload Linux appbundle artifacts
+          mkdir -p dist
+          mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
+
+      - name: Upload Linux AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appbundle
-          path: |
-            dist/tesmart-ui-linux-appbundle.tar.xz
-            dist/tesmart-ui-linux-desktop-files.zip
+          name: linux-appimage
+          path: dist/tesmart-ui-linux.AppImage
 
   build-macos-amd64:
     runs-on: macos-13
