@@ -95,12 +95,12 @@ jobs:
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
 
           # 3) Package with fyne (uses absolute icon)
-          fyne package -os darwin \
-            -name "${APP_NAME}" \
-            -appID "${APP_ID}" \
-            -icon "${ICON_ABS}" \
-            -release \
-            -sourceDir "${SRC_DIR}"
+          fyne package --os darwin \
+            --name "${APP_NAME}" \
+            --app-id "${APP_ID}" \
+            --icon "${ICON_ABS}" \
+            --release \
+            --source-dir "${SRC_DIR}"
 
           # 4) Optional ad-hoc sign (no notarization; preserves “Open Anyway” flow)
           codesign --force --deep --sign - "${APP_NAME}.app"
@@ -148,12 +148,12 @@ jobs:
 
           # 3) Package with fyne for arm64
           GOOS=darwin GOARCH=arm64 fyne package \
-            -os darwin \
-            -name "${APP_NAME}" \
-            -appID "${APP_ID}" \
-            -icon "${ICON_ABS}" \
-            -release \
-            -sourceDir "${SRC_DIR}"
+            --os darwin \
+            --name "${APP_NAME}" \
+            --app-id "${APP_ID}" \
+            --icon "${ICON_ABS}" \
+            --release \
+            --source-dir "${SRC_DIR}"
 
           # 4) Optional: ad-hoc sign (keeps Open Anyway flow; no notarization)
           codesign --force --deep --sign - "${APP_NAME}.app"
