@@ -34,7 +34,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            gcc pkg-config libgl1-mesa-dev xorg-dev libxkbcommon-dev
+            gcc build-essential pkg-config \
+            libgl1-mesa-dev xorg-dev libxkbcommon-dev \
+            libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
@@ -54,16 +56,14 @@ jobs:
           name: linux-amd64
           path: dist/tesmart-ui-linux-amd64.tar.gz
 
-  package-linux:
+  package-linux-appimage:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
-
-      - name: Install build deps (GL/X11 + toolchain)
+      - name: Install build deps (GL/X11 + toolchain + fuse)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -71,15 +71,13 @@ jobs:
             libgl1-mesa-dev xorg-dev \
             libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev \
             libfuse2
-
       - name: Install Fyne CLI
         run: |
           go install fyne.io/tools/cmd/fyne@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
           which fyne
           fyne version || true
-
-      - name: Package Linux AppImage
+      - name: Package Linux bundle with Fyne
         env:
           CGO_ENABLED: '1'
           APP_NAME: ${{ env.APP_NAME }}
@@ -90,17 +88,53 @@ jobs:
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
           fyne package \
             --os linux \
-            --appimage \
             --name "${APP_NAME}" \
             --app-id "${APP_ID}" \
             --icon "${ICON_ABS}" \
             --release \
             --source-dir "${SRC_DIR}"
+      - name: Build AppImage from AppDir
+        env:
+          APP_NAME: ${{ env.APP_NAME }}
+        run: |
+          set -euo pipefail
+          # 1) Extract Fyne bundle
+          rm -rf appdir AppDir
+          mkdir -p appdir AppDir/usr/bin
+          tar -xJf "${APP_NAME}.tar.xz" -C appdir
+
+          # 2) Move binary into AppDir/usr/bin (pick first executable if name unknown)
+          BIN_SRC="$(find appdir -maxdepth 1 -type f -perm -u+x | head -n1)"
+          BIN_NAME="tesmart-ui"
+          mv "${BIN_SRC}" "AppDir/usr/bin/${BIN_NAME}"
+          chmod +x "AppDir/usr/bin/${BIN_NAME}"
+
+          # 3) Desktop file & icon at AppDir root
+          cp "${APP_NAME}.desktop" "AppDir/${APP_NAME}.desktop"
+          cp "${APP_NAME}.png"      "AppDir/${APP_NAME}.png"
+
+          # Normalize Exec and Icon entries
+          sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "AppDir/${APP_NAME}.desktop"
+          sed -i "s|^Icon=.*|Icon=${APP_NAME}|" "AppDir/${APP_NAME}.desktop"
+
+          # 4) Minimal AppRun launcher
+          cat > AppDir/AppRun << 'EOF'
+          #!/usr/bin/env sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export PATH="$HERE/usr/bin:$PATH"
+          exec "$HERE/usr/bin/tesmart-ui" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # 5) Download and run appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ./appimagetool --comp zstd AppDir "${APP_NAME}.AppImage"
 
           mkdir -p dist
+          chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
-
-      - name: Upload Linux AppImage artifact
+      - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
@@ -225,7 +259,7 @@ jobs:
   publish:
     needs:
       - build-linux-amd64
-      - package-linux
+      - package-linux-appimage
       - build-macos-amd64
       - build-macos-arm64
       - build-windows-amd64
@@ -245,7 +279,9 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Restore exec bits
-        run: chmod +x dist/tesmart-ui-linux-amd64 || true
+        run: |
+          chmod +x dist/tesmart-ui-linux-amd64 || true
+          chmod +x dist/tesmart-ui-linux.AppImage || true
       - name: List artifacts (debug)
         run: ls -l dist
       - name: Upload assets to the Release
@@ -257,8 +293,7 @@ jobs:
           prerelease: ${{ inputs.prerelease == true }}
           files: |
             dist/tesmart-ui-linux-amd64.tar.gz
-            dist/tesmart-ui-linux-appbundle.tar.xz
-            dist/tesmart-ui-linux-desktop-files.zip
+            dist/tesmart-ui-linux.AppImage
             dist/tesmart-ui-macos-amd64.zip
             dist/tesmart-ui-macos-arm64.zip
             dist/tesmart-ui-windows-amd64.zip
