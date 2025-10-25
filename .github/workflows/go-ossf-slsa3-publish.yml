@@ -94,6 +94,8 @@ jobs:
           APPDIR="AppDir"
           BIN_NAME="tesmart-ui"
           ICON_SRC="$(pwd)/internal/ui/assets/tray.png"
+          DESKTOP_NAME="${APP_ID}.desktop"
+          ICON_NAME="${APP_ID}.png"
 
           rm -rf "${APPDIR}"
           mkdir -p "${APPDIR}/usr/bin"
@@ -104,8 +106,9 @@ jobs:
           cp dist/${BIN_NAME} "${APPDIR}/usr/bin/${BIN_NAME}"
           chmod +x "${APPDIR}/usr/bin/${BIN_NAME}"
 
-          # Desktop entry
-          cat > "${APPDIR}/usr/share/applications/${APP_ID}.desktop" <<EOF
+          # --- AppImage requires .desktop + icon at the TOP LEVEL of AppDir ---
+          # Top-level .desktop (ID-based, no spaces)
+          cat > "${APPDIR}/${DESKTOP_NAME}" <<EOF
           [Desktop Entry]
           Type=Application
           Name=${APP_NAME}
@@ -115,11 +118,19 @@ jobs:
           Categories=Utility;
           EOF
 
-          # Icon
+          # Top-level icon
           if [ -f "${ICON_SRC}" ]; then
-            cp "${ICON_SRC}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${APP_ID}.png"
+            cp "${ICON_SRC}" "${APPDIR}/${ICON_NAME}"
           else
             echo "WARNING: Icon not found at ${ICON_SRC}"
+          fi
+          # Optional: .DirIcon helps some desktops
+          ln -sf "${ICON_NAME}" "${APPDIR}/.DirIcon" || true
+
+          # (Optional) also install into usr/share for desktop integration if extracted
+          cp "${APPDIR}/${DESKTOP_NAME}" "${APPDIR}/usr/share/applications/${DESKTOP_NAME}"
+          if [ -f "${APPDIR}/${ICON_NAME}" ]; then
+            cp "${APPDIR}/${ICON_NAME}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${ICON_NAME}"
           fi
 
           # AppRun
@@ -131,14 +142,26 @@ jobs:
           EOF
           chmod +x "${APPDIR}/AppRun"
 
+          echo "== AppDir contents =="
+          find "${APPDIR}" -maxdepth 2 -type f -printf "%P\n" | sort
+
       - name: Build AppImage
         env:
           APP_NAME: ${{ env.APP_NAME }}
+          APP_ID:   ${{ env.APP_ID }}
         run: |
           set -euo pipefail
           wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
+
+          # Sanity checks expected by appimagetool
+          test -x AppDir/AppRun
+          test -f "AppDir/${APP_ID}.desktop"
+          test -f "AppDir/${APP_ID}.png"
+
+          # Build (verbose, skip appstream)
           ./appimagetool -v --no-appstream AppDir "${APP_NAME}.AppImage"
+
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
