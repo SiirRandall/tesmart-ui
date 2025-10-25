@@ -30,17 +30,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-
       - name: Install GL/X11 dev headers for Fyne
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             gcc pkg-config libgl1-mesa-dev xorg-dev libxkbcommon-dev
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
-
       - name: Build (linux/amd64)
         env:
           CGO_ENABLED: '1'
@@ -51,32 +48,66 @@ jobs:
           cd ../../dist
           chmod +x tesmart-ui-linux-amd64
           tar -czf tesmart-ui-linux-amd64.tar.gz tesmart-ui-linux-amd64
-
-      - name: Upload linux artifact
+      - name: Upload linux binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-amd64
           path: dist/tesmart-ui-linux-amd64.tar.gz
 
+  package-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.12'
+      - name: Install Fyne CLI
+        run: |
+          go install fyne.io/tools/cmd/fyne@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+          which fyne
+          fyne version || true
+      - name: Package Linux app (tar.xz + .desktop + icon)
+        env:
+          APP_NAME: ${{ env.APP_NAME }}
+          APP_ID:   ${{ env.APP_ID }}
+          SRC_DIR:  ${{ env.SRC_DIR }}
+        run: |
+          set -euo pipefail
+          ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
+          fyne package \
+            --os linux \
+            --name "${APP_NAME}" \
+            --app-id "${APP_ID}" \
+            --icon "${ICON_ABS}" \
+            --release \
+            --source-dir "${SRC_DIR}"
+          mkdir -p dist
+          mv "${APP_NAME}.tar.xz" dist/tesmart-ui-linux-appbundle.tar.xz || mv "${APP_NAME}.tar.xz" dist/
+          zip -j dist/tesmart-ui-linux-desktop-files.zip "${APP_NAME}.desktop" "${APP_NAME}.png" || true
+      - name: Upload Linux appbundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appbundle
+          path: |
+            dist/tesmart-ui-linux-appbundle.tar.xz
+            dist/tesmart-ui-linux-desktop-files.zip
+
   build-macos-amd64:
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
-
       - name: Install fyne CLI (new toolchain)
         run: |
           go install fyne.io/tools/cmd/fyne@latest
           sudo rm -f /usr/local/bin/fyne || true
           sudo ln -sf "$HOME/go/bin/fyne" /usr/local/bin/fyne
           echo "$HOME/go/bin" >> $GITHUB_PATH
-          echo "Using fyne binary:"
           which fyne
           fyne version || true
-
       - name: Package app (darwin/amd64) with icon
         env:
           CGO_ENABLED: '1'
@@ -86,49 +117,39 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-
-          # 1) Verify icon exists
-          ls -l ./internal/ui/assets || true
-          test -f "./internal/ui/assets/tray.png"
-
-          # 2) Absolute icon path
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
-
-          # 3) Package with fyne (uses absolute icon)
-          fyne package --os darwin \
+          fyne package \
+            --os darwin \
             --name "${APP_NAME}" \
             --app-id "${APP_ID}" \
             --icon "${ICON_ABS}" \
             --release \
             --source-dir "${SRC_DIR}"
-
-          # 4) Optional ad-hoc sign (no notarization; preserves “Open Anyway” flow)
           codesign --force --deep --sign - "${APP_NAME}.app"
-
-          # 5) Zip preserving bundle metadata
           ARCH=amd64
           ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-${ARCH}.zip"
           mv "tesmart-ui-macos-${ARCH}.zip" dist/
+      - name: Upload macOS amd64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-amd64
+          path: dist/tesmart-ui-macos-amd64.zip
 
   build-macos-arm64:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
-
       - name: Install fyne CLI (new toolchain)
         run: |
           go install fyne.io/tools/cmd/fyne@latest
           sudo rm -f /usr/local/bin/fyne || true
           sudo ln -sf "$HOME/go/bin/fyne" /usr/local/bin/fyne
           echo "$HOME/go/bin" >> $GITHUB_PATH
-          echo "Using fyne binary:"
           which fyne
           fyne version || true
-
       - name: Package app (darwin/arm64) with icon
         env:
           CGO_ENABLED: '1'
@@ -138,15 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-
-          # 1) Verify icon exists (repo-relative)
-          ls -l ./internal/ui/assets || true
-          test -f "./internal/ui/assets/tray.png"
-
-          # 2) Use absolute icon path to avoid cwd/sourceDir ambiguity
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
-
-          # 3) Package with fyne for arm64
           GOOS=darwin GOARCH=arm64 fyne package \
             --os darwin \
             --name "${APP_NAME}" \
@@ -154,15 +167,10 @@ jobs:
             --icon "${ICON_ABS}" \
             --release \
             --source-dir "${SRC_DIR}"
-
-          # 4) Optional: ad-hoc sign (keeps Open Anyway flow; no notarization)
           codesign --force --deep --sign - "${APP_NAME}.app"
-
-          # 5) Zip preserving bundle metadata; keep quarantine
           ARCH=arm64
           ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-${ARCH}.zip"
           mv "tesmart-ui-macos-${ARCH}.zip" dist/
-
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -180,11 +188,9 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkg-config
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.12'
-
       - name: Build (windows/amd64)
         shell: bash
         env:
@@ -197,7 +203,6 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-H=windowsgui -s -w" -o ../../dist/tesmart-ui-windows-amd64.exe
           cd ../../dist
           powershell -Command "Compress-Archive -Path tesmart-ui-windows-amd64.exe -DestinationPath tesmart-ui-windows-amd64.zip"
-
       - name: Upload windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -207,6 +212,7 @@ jobs:
   publish:
     needs:
       - build-linux-amd64
+      - package-linux
       - build-macos-amd64
       - build-macos-arm64
       - build-windows-amd64
@@ -238,6 +244,8 @@ jobs:
           prerelease: ${{ inputs.prerelease == true }}
           files: |
             dist/tesmart-ui-linux-amd64.tar.gz
+            dist/tesmart-ui-linux-appbundle.tar.xz
+            dist/tesmart-ui-linux-desktop-files.zip
             dist/tesmart-ui-macos-amd64.zip
             dist/tesmart-ui-macos-arm64.zip
             dist/tesmart-ui-windows-amd64.zip
