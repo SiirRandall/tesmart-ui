@@ -97,13 +97,16 @@ jobs:
       - name: Build AppImage from AppDir
         env:
           APP_NAME: ${{ env.APP_NAME }}
+          APP_ID:   ${{ env.APP_ID }}
         run: |
           set -euo pipefail
           APPDIR="AppDir"
           BIN_NAME="tesmart-ui"
           ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
+          DESKTOP_NAME="${APP_ID}.desktop"
+          ICON_NAME="${APP_ID}.png"
 
-          # 1) Extract Fyne bundle
+          # 1) Extract Fyne bundle (debug)
           rm -rf appdir "${APPDIR}"
           mkdir -p appdir "${APPDIR}"
           echo "== Contents of ${APP_NAME}.tar.xz =="
@@ -122,51 +125,46 @@ jobs:
             exit 1
           fi
 
-          # 3) Normalize binary path
-          mkdir -p "${APPDIR}/usr/bin"
-          FOUND_BIN="$(find "${APPDIR}/usr" -type f -perm -u+x -name "${BIN_NAME}" | head -n1 || true)"
-          if [ -z "${FOUND_BIN}" ]; then
-            FOUND_BIN="$(find "${APPDIR}/usr" -type f -perm -u+x -path '*/bin/*' | head -n1 || true)"
+          # 3) Ensure executable location(s)
+          # Binary usually at usr/local/bin/tesmart-ui
+          if [ ! -x "${APPDIR}/usr/local/bin/${BIN_NAME}" ] && [ -f "${APPDIR}/usr/local/bin/${BIN_NAME}" ]; then
+            chmod +x "${APPDIR}/usr/local/bin/${BIN_NAME}"
           fi
-          if [ -z "${FOUND_BIN}" ] || [ ! -f "${FOUND_BIN}" ]; then
-            echo "ERROR: No executable found under ${APPDIR}/usr"
-            find "${APPDIR}" -maxdepth 4 -type f -printf "%M %p\n" || true
-            exit 1
-          fi
-          mv "${FOUND_BIN}" "${APPDIR}/usr/local/bin/${BIN_NAME}" 2>/dev/null || true
-          chmod +x "${APPDIR}/usr/local/bin/${BIN_NAME}" || true
-
-          # 4) Ensure /usr/bin symlink for AppImage
+          # Provide /usr/bin path (symlink) for AppImage validation
           mkdir -p "${APPDIR}/usr/bin"
-          if [ ! -f "${APPDIR}/usr/bin/${BIN_NAME}" ]; then
+          if [ ! -e "${APPDIR}/usr/bin/${BIN_NAME}" ]; then
             ln -sf "../local/bin/${BIN_NAME}" "${APPDIR}/usr/bin/${BIN_NAME}"
           fi
 
-          # 5) Desktop & icon
+          # 4) Desktop & icon (use id-based filenames without spaces)
           DESKTOP_SRC="$(find appdir/usr/local/share/applications -maxdepth 1 -type f -name '*.desktop' 2>/dev/null | head -n1 || true)"
           ICON_SRC="$(find appdir/usr/local/share/pixmaps -maxdepth 1 -type f -name '*.png' 2>/dev/null | head -n1 || true)"
+
           if [ -n "${DESKTOP_SRC}" ]; then
-            cp "${DESKTOP_SRC}" "${APPDIR}/${APP_NAME}.desktop"
+            cp "${DESKTOP_SRC}" "${APPDIR}/${DESKTOP_NAME}"
           else
-            cat > "${APPDIR}/${APP_NAME}.desktop" <<EOF
+            cat > "${APPDIR}/${DESKTOP_NAME}" <<EOF
           [Desktop Entry]
           Type=Application
           Name=${APP_NAME}
           Exec=${BIN_NAME}
-          Icon=${APP_NAME}
+          Icon=${APP_ID}
           Terminal=false
           Categories=Utility;
           EOF
           fi
-          if [ -n "${ICON_SRC}" ]; then
-            cp "${ICON_SRC}" "${APPDIR}/${APP_NAME}.png"
-          elif [ -f "${ICON_ABS}" ]; then
-            cp "${ICON_ABS}" "${APPDIR}/${APP_NAME}.png"
-          fi
-          sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "${APPDIR}/${APP_NAME}.desktop"
-          sed -i "s|^Icon=.*|Icon=${APP_NAME}|" "${APPDIR}/${APP_NAME}.desktop"
 
-          # 6) AppRun
+          if [ -n "${ICON_SRC}" ]; then
+            cp "${ICON_SRC}" "${APPDIR}/${ICON_NAME}"
+          elif [ -f "${ICON_ABS}" ]; then
+            cp "${ICON_ABS}" "${APPDIR}/${ICON_NAME}"
+          fi
+
+          # Normalize Exec and Icon entries (no spaces in Icon)
+          sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "${APPDIR}/${DESKTOP_NAME}"
+          sed -i "s|^Icon=.*|Icon=${APP_ID}|"   "${APPDIR}/${DESKTOP_NAME}"
+
+          # 5) AppRun
           cat > "${APPDIR}/AppRun" << 'EOF'
           #!/usr/bin/env sh
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -175,20 +173,14 @@ jobs:
           EOF
           chmod +x "${APPDIR}/AppRun"
 
-          # 7) Build AppImage
+          # 6) Build AppImage (verbose, skip appstream validation)
           wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
-          ./appimagetool --comp zstd "${APPDIR}" "${APP_NAME}.AppImage"
+          ./appimagetool -v --no-appstream --comp zstd "${APPDIR}" "${APP_NAME}.AppImage"
 
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
-
-      - name: Upload Linux AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-appimage
-          path: dist/tesmart-ui-linux.AppImage
 
   build-macos-amd64:
     runs-on: macos-13
