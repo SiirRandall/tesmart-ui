@@ -98,22 +98,43 @@ jobs:
           APP_NAME: ${{ env.APP_NAME }}
         run: |
           set -euo pipefail
-          # 1) Extract Fyne bundle
+
+          # 1) Extract Fyne bundle (and show what's inside for debug)
           rm -rf appdir AppDir
           mkdir -p appdir AppDir/usr/bin
+          echo "== Contents of ${APP_NAME}.tar.xz =="
+          tar -tJf "${APP_NAME}.tar.xz" || true
           tar -xJf "${APP_NAME}.tar.xz" -C appdir
+          echo "== After extract =="
+          ls -la appdir || true
 
-          # 2) Move binary into AppDir/usr/bin (pick first executable if name unknown)
-          BIN_SRC="$(find appdir -maxdepth 1 -type f -perm -u+x | head -n1)"
+          # 2) Locate the binary robustly (it may not be +x and may have spaces)
           BIN_NAME="tesmart-ui"
+          PRIMARY_CANDIDATE="appdir/${APP_NAME}"  # e.g. "appdir/TeSmart UI"
+          if [ -f "${PRIMARY_CANDIDATE}" ]; then
+            BIN_SRC="${PRIMARY_CANDIDATE}"
+          else
+            # fallback: first file that is not .desktop or .png
+            BIN_SRC="$(find appdir -maxdepth 1 -type f ! -name '*.desktop' ! -name '*.png' | head -n1 || true)"
+          fi
+
+          if [ -z "${BIN_SRC:-}" ] || [ ! -f "${BIN_SRC}" ]; then
+            echo "ERROR: Could not locate app binary in the Fyne tarball."
+            echo "Listing appdir:"
+            ls -la appdir
+            exit 1
+          fi
+
+          # Ensure executable bit before moving
+          chmod +x "${BIN_SRC}"
           mv "${BIN_SRC}" "AppDir/usr/bin/${BIN_NAME}"
           chmod +x "AppDir/usr/bin/${BIN_NAME}"
 
-          # 3) Desktop file & icon at AppDir root
+          # 3) Desktop file & icon at AppDir root (these are created next to the tar)
           cp "${APP_NAME}.desktop" "AppDir/${APP_NAME}.desktop"
           cp "${APP_NAME}.png"      "AppDir/${APP_NAME}.png"
 
-          # Normalize Exec and Icon entries
+          # Normalize Exec and Icon entries for AppImage
           sed -i "s|^Exec=.*|Exec=${BIN_NAME}|" "AppDir/${APP_NAME}.desktop"
           sed -i "s|^Icon=.*|Icon=${APP_NAME}|" "AppDir/${APP_NAME}.desktop"
 
@@ -134,11 +155,11 @@ jobs:
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
-      - name: Upload Linux AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-appimage
-          path: dist/tesmart-ui-linux.AppImage
+                - name: Upload Linux AppImage
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: linux-appimage
+                    path: dist/tesmart-ui-linux.AppImage
 
   build-macos-amd64:
     runs-on: macos-13
