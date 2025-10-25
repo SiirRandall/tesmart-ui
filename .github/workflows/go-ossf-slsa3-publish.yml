@@ -67,9 +67,9 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      - name: Install fyne CLI
+      - name: Install fyne CLI (new toolchain)
         run: |
-          go install fyne.io/fyne/v2/cmd/fyne@latest
+          go install fyne.io/tools/cmd/fyne@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Package app (darwin/amd64) with icon
@@ -78,30 +78,32 @@ jobs:
           APP_NAME: ${{ env.APP_NAME }}
           APP_ID:   ${{ env.APP_ID }}
           SRC_DIR:  ${{ env.SRC_DIR }}
-          ICON_PATH: ${{ env.ICON_PATH }}
         run: |
+          set -euo pipefail
           mkdir -p dist
-          # Build & package with fyne (uses your PNG; generates .icns automatically)
+
+          # 1) Verify icon exists
+          ls -l ./internal/ui/assets || true
+          test -f "./internal/ui/assets/tray.png"
+
+          # 2) Absolute icon path
+          ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
+
+          # 3) Package with fyne (uses absolute icon)
           fyne package -os darwin \
             -name "${APP_NAME}" \
             -appID "${APP_ID}" \
-            -icon "${ICON_PATH}" \
+            -icon "${ICON_ABS}" \
             -release \
             -sourceDir "${SRC_DIR}"
 
-          # The output is "<APP_NAME>.app" in the working dir
-          # (Optional) ad-hoc sign to avoid odd “damaged” cases
+          # 4) Optional ad-hoc sign (no notarization; preserves “Open Anyway” flow)
           codesign --force --deep --sign - "${APP_NAME}.app"
 
-          # Zip preserving bundle metadata; keep quarantine so users see Open Anyway
-          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-amd64.zip"
-          mv "tesmart-ui-macos-amd64.zip" dist/
-
-      - name: Upload macOS amd64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-amd64
-          path: dist/tesmart-ui-macos-amd64.zip
+          # 5) Zip preserving bundle metadata
+          ARCH=amd64
+          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-${ARCH}.zip"
+          mv "tesmart-ui-macos-${ARCH}.zip" dist/
 
   build-macos-arm64:
     runs-on: macos-14
@@ -112,9 +114,9 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      - name: Install fyne CLI
+      - name: Install fyne CLI (new toolchain)
         run: |
-          go install fyne.io/fyne/v2/cmd/fyne@latest
+          go install fyne.io/tools/cmd/fyne@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Package app (darwin/arm64) with icon
@@ -123,23 +125,33 @@ jobs:
           APP_NAME: ${{ env.APP_NAME }}
           APP_ID:   ${{ env.APP_ID }}
           SRC_DIR:  ${{ env.SRC_DIR }}
-          ICON_PATH: ${{ env.ICON_PATH }}
         run: |
+          set -euo pipefail
           mkdir -p dist
-          # Force arm64 build via GOARCH when packaging
+
+          # 1) Verify icon exists (repo-relative)
+          ls -l ./internal/ui/assets || true
+          test -f "./internal/ui/assets/tray.png"
+
+          # 2) Use absolute icon path to avoid cwd/sourceDir ambiguity
+          ICON_ABS="$(pwd)/internal/ui/assets/tray.png"
+
+          # 3) Package with fyne for arm64
           GOOS=darwin GOARCH=arm64 fyne package \
             -os darwin \
             -name "${APP_NAME}" \
             -appID "${APP_ID}" \
-            -icon "${ICON_PATH}" \
+            -icon "${ICON_ABS}" \
             -release \
             -sourceDir "${SRC_DIR}"
 
-          # (Optional) ad-hoc sign
+          # 4) Optional: ad-hoc sign (keeps Open Anyway flow; no notarization)
           codesign --force --deep --sign - "${APP_NAME}.app"
 
-          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-arm64.zip"
-          mv "tesmart-ui-macos-arm64.zip" dist/
+          # 5) Zip preserving bundle metadata; keep quarantine
+          ARCH=arm64
+          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-${ARCH}.zip"
+          mv "tesmart-ui-macos-${ARCH}.zip" dist/
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
