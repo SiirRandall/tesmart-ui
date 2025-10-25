@@ -89,6 +89,7 @@ jobs:
           APP_NAME: ${{ env.APP_NAME }}
         run: |
           set -euo pipefail
+          set -x
           APPDIR="AppDir"
           BIN_NAME="tesmart-ui"
           ICON_SRC="$(pwd)/internal/ui/assets/tray.png"
@@ -104,18 +105,19 @@ jobs:
           cp dist/${BIN_NAME} "${APPDIR}/usr/bin/${BIN_NAME}"
           chmod +x "${APPDIR}/usr/bin/${BIN_NAME}"
 
-          # Top-level .desktop
+          # Top-level .desktop (no spaces in filename, Icon uses ID)
           cat > "${APPDIR}/${DESKTOP_NAME}" <<EOF
           [Desktop Entry]
           Type=Application
           Name=${APP_NAME}
+          Comment=${APP_NAME}
           Exec=${BIN_NAME}
           Icon=${APP_ID}
           Terminal=false
           Categories=Utility;
           EOF
 
-          # Top-level icon
+          # Top-level icon (and .DirIcon symlink)
           if [ -f "${ICON_SRC}" ]; then
             cp "${ICON_SRC}" "${APPDIR}/${ICON_NAME}"
           else
@@ -123,7 +125,7 @@ jobs:
           fi
           ln -sf "${ICON_NAME}" "${APPDIR}/.DirIcon" || true
 
-          # Optional copies in usr/share
+          # Optional: also install into usr/share for completeness
           cp "${APPDIR}/${DESKTOP_NAME}" "${APPDIR}/usr/share/applications/${DESKTOP_NAME}"
           if [ -f "${APPDIR}/${ICON_NAME}" ]; then
             cp "${APPDIR}/${ICON_NAME}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${ICON_NAME}"
@@ -138,8 +140,15 @@ jobs:
           EOF
           chmod +x "${APPDIR}/AppRun"
 
-          echo "== AppDir contents =="
-          find "${APPDIR}" -maxdepth 2 -type f -printf "%P\n" | sort
+          # Diagnostics
+          echo "== AppDir summary =="
+          find "${APPDIR}" -maxdepth 2 -type f -printf "%M %p\n" | sort
+          echo "== desktop-file-validate (verbose) =="
+          desktop-file-validate -v "${APPDIR}/${DESKTOP_NAME}" || true
+          echo "== file(1) on binary =="
+          file "${APPDIR}/usr/bin/${BIN_NAME}" || true
+          echo "== ldd on binary =="
+          ldd "${APPDIR}/usr/bin/${BIN_NAME}" || true
 
       - name: Build AppImage
         env:
@@ -147,25 +156,37 @@ jobs:
           APP_ID:   ${{ env.APP_ID }}
         run: |
           set -euo pipefail
-          # Validate desktop entry for clarity
-          desktop-file-validate "AppDir/${APP_ID}.desktop" || {
-            echo "desktop-file-validate failed above"; exit 1; }
-
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
-          chmod +x appimagetool
-
-          # Sanity checks
-          test -x AppDir/AppRun
+          set -x
+          # Hard-fail if the key files are missing
+          test -x "AppDir/AppRun"
           test -f "AppDir/${APP_ID}.desktop"
           test -f "AppDir/${APP_ID}.png"
 
-          # Build AppImage
-          ./appimagetool -v --no-appstream AppDir "${APP_NAME}.AppImage"
+          # Validate .desktop strictly before building
+          desktop-file-validate "AppDir/${APP_ID}.desktop"
+
+          # Pull appimagetool (x86_64)
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+
+          # Ensure squashfs is available
+          command -v mksquashfs
+
+          # Helpful metadata for the image (optional but good practice)
+          export VERSION="${GITHUB_REF_NAME:-$(date +%Y%m%d)}"
+          export ARCH="x86_64"
+
+          # Build AppImage (verbose, skip appstream)
+          ./appimagetool -v --no-appstream AppDir "${APP_NAME}.AppImage" 2>&1 | tee appimagetool.log || {
+            echo "appimagetool failed. Dumping AppDir tree and log tail:"
+            find AppDir -maxdepth 4 -type f -printf "%M %p\n" | sort
+            tail -n 200 appimagetool.log || true
+            exit 1
+          }
 
           mkdir -p dist
           chmod +x "${APP_NAME}.AppImage"
           mv "${APP_NAME}.AppImage" dist/tesmart-ui-linux.AppImage
-
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
