@@ -70,7 +70,12 @@ jobs:
       - name: Install fyne CLI (new toolchain)
         run: |
           go install fyne.io/tools/cmd/fyne@latest
+          sudo rm -f /usr/local/bin/fyne || true
+          sudo ln -sf "$HOME/go/bin/fyne" /usr/local/bin/fyne
           echo "$HOME/go/bin" >> $GITHUB_PATH
+          echo "Using fyne binary:"
+          which fyne
+          fyne version || true
 
       - name: Package app (darwin/amd64) with icon
         env:
@@ -117,7 +122,12 @@ jobs:
       - name: Install fyne CLI (new toolchain)
         run: |
           go install fyne.io/tools/cmd/fyne@latest
+          sudo rm -f /usr/local/bin/fyne || true
+          sudo ln -sf "$HOME/go/bin/fyne" /usr/local/bin/fyne
           echo "$HOME/go/bin" >> $GITHUB_PATH
+          echo "Using fyne binary:"
+          which fyne
+          fyne version || true
 
       - name: Package app (darwin/arm64) with icon
         env:
