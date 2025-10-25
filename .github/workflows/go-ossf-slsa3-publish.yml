@@ -20,7 +20,7 @@ permissions:
   id-token: write
 
 env:
-  APP_ID: com.yourname.tesmartui
+  APP_ID: com.siirrandall.tesmartui
   APP_NAME: TeSmart UI
   ICON_PATH: ./internal/ui/assets/tray.png
   SRC_DIR: ./cmd/tesmart-ui
@@ -67,60 +67,35 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      - name: Build (darwin/amd64)
+      - name: Install fyne CLI
+        run: |
+          go install fyne.io/fyne/v2/cmd/fyne@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - name: Package app (darwin/amd64) with icon
         env:
           CGO_ENABLED: '1'
+          APP_NAME: ${{ env.APP_NAME }}
+          APP_ID:   ${{ env.APP_ID }}
+          SRC_DIR:  ${{ env.SRC_DIR }}
+          ICON_PATH: ${{ env.ICON_PATH }}
         run: |
           mkdir -p dist
-          cd cmd/tesmart-ui
-          GOOS=darwin GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-macos-amd64
-          cd ../../dist
-          chmod +x tesmart-ui-macos-amd64
-          
-          # Create app bundle structure
-          mkdir -p "TeSmart UI.app/Contents/MacOS"
-          mkdir -p "TeSmart UI.app/Contents/Resources"
-          
-          # Move binary to app bundle
-          mv tesmart-ui-macos-amd64 "TeSmart UI.app/Contents/MacOS/TeSmart UI"
-          
-          # Create Info.plist
-          cat > "TeSmart UI.app/Contents/Info.plist" << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>TeSmart UI</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.yourname.tesmartui</string>
-              <key>CFBundleName</key>
-              <string>TeSmart UI</string>
-              <key>CFBundleDisplayName</key>
-              <string>TeSmart UI</string>
-              <key>CFBundleVersion</key>
-              <string>1.0.0</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0.0</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleSignature</key>
-              <string>????</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>10.15</string>
-              <key>NSHighResolutionCapable</key>
-              <true/>
-              <key>LSUIElement</key>
-              <true/>
-          </dict>
-          </plist>
-          EOF
-          
-          # Optional: ad-hoc sign app to avoid “damaged” warnings
-          codesign --force --deep --sign - "TeSmart UI.app"
-          
-          # Create app bundle zip with proper metadata preservation
-          ditto -c -k --sequesterRsrc --keepParent "TeSmart UI.app" tesmart-ui-macos-amd64.zip
+          # Build & package with fyne (uses your PNG; generates .icns automatically)
+          fyne package -os darwin \
+            -name "${APP_NAME}" \
+            -appID "${APP_ID}" \
+            -icon "${ICON_PATH}" \
+            -release \
+            -sourceDir "${SRC_DIR}"
+
+          # The output is "<APP_NAME>.app" in the working dir
+          # (Optional) ad-hoc sign to avoid odd “damaged” cases
+          codesign --force --deep --sign - "${APP_NAME}.app"
+
+          # Zip preserving bundle metadata; keep quarantine so users see Open Anyway
+          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-amd64.zip"
+          mv "tesmart-ui-macos-amd64.zip" dist/
 
       - name: Upload macOS amd64 artifact
         uses: actions/upload-artifact@v4
@@ -137,60 +112,34 @@ jobs:
         with:
           go-version: '1.22.12'
 
-      - name: Build (darwin/arm64)
+      - name: Install fyne CLI
+        run: |
+          go install fyne.io/fyne/v2/cmd/fyne@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - name: Package app (darwin/arm64) with icon
         env:
           CGO_ENABLED: '1'
+          APP_NAME: ${{ env.APP_NAME }}
+          APP_ID:   ${{ env.APP_ID }}
+          SRC_DIR:  ${{ env.SRC_DIR }}
+          ICON_PATH: ${{ env.ICON_PATH }}
         run: |
           mkdir -p dist
-          cd cmd/tesmart-ui
-          GOOS=darwin GOARCH=arm64 go build -trimpath -o ../../dist/tesmart-ui-macos-arm64
-          cd ../../dist
-          chmod +x tesmart-ui-macos-arm64
-          
-          # Create app bundle structure
-          mkdir -p "TeSmart UI.app/Contents/MacOS"
-          mkdir -p "TeSmart UI.app/Contents/Resources"
-          
-          # Move binary to app bundle
-          mv tesmart-ui-macos-arm64 "TeSmart UI.app/Contents/MacOS/TeSmart UI"
-          
-          # Create Info.plist
-          cat > "TeSmart UI.app/Contents/Info.plist" << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>TeSmart UI</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.yourname.tesmartui</string>
-              <key>CFBundleName</key>
-              <string>TeSmart UI</string>
-              <key>CFBundleDisplayName</key>
-              <string>TeSmart UI</string>
-              <key>CFBundleVersion</key>
-              <string>1.0.0</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0.0</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleSignature</key>
-              <string>????</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>10.15</string>
-              <key>NSHighResolutionCapable</key>
-              <true/>
-              <key>LSUIElement</key>
-              <true/>
-          </dict>
-          </plist>
-          EOF
-          
-          # Optional: ad-hoc sign app to avoid “damaged” warnings
-          codesign --force --deep --sign - "TeSmart UI.app"
-          
-          # Create app bundle zip with proper metadata preservation
-          ditto -c -k --sequesterRsrc --keepParent "TeSmart UI.app" tesmart-ui-macos-arm64.zip
+          # Force arm64 build via GOARCH when packaging
+          GOOS=darwin GOARCH=arm64 fyne package \
+            -os darwin \
+            -name "${APP_NAME}" \
+            -appID "${APP_ID}" \
+            -icon "${ICON_PATH}" \
+            -release \
+            -sourceDir "${SRC_DIR}"
+
+          # (Optional) ad-hoc sign
+          codesign --force --deep --sign - "${APP_NAME}.app"
+
+          ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "tesmart-ui-macos-arm64.zip"
+          mv "tesmart-ui-macos-arm64.zip" dist/
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v4
@@ -223,7 +172,7 @@ jobs:
         run: |
           mkdir -p dist
           cd "$SRC_DIR"
-          GOOS=windows GOARCH=amd64 go build -trimpath -o ../../dist/tesmart-ui-windows-amd64.exe
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-H=windowsgui -s -w" -o ../../dist/tesmart-ui-windows-amd64.exe
           cd ../../dist
           powershell -Command "Compress-Archive -Path tesmart-ui-windows-amd64.exe -DestinationPath tesmart-ui-windows-amd64.zip"
 
